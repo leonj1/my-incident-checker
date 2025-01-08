@@ -81,25 +81,22 @@ func fetchIncidents() ([]Incident, error) {
 		return nil, fmt.Errorf("failed to fetch incidents: %w", err)
 	}
 	defer resp.Body.Close()
-	log.Printf("Received response from incidents API\n")
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code from incidents API: %d", resp.StatusCode)
 	}
 
-	log.Printf("Reading response body\n")
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	log.Printf("Parsing response body\n")
 	var incidents []Incident
 	if err := json.Unmarshal(body, &incidents); err != nil {
 		return nil, fmt.Errorf("failed to parse incidents: %w", err)
 	}
 
-	log.Printf("Successfully fetched incidents\n")
+	log.Printf("Successfully fetched incidents: %d\n", len(incidents))
 	return incidents, nil
 }
 
@@ -108,6 +105,9 @@ func isRelevantState(state string) bool {
 }
 
 func pollIncidents(startTime time.Time) {
+	// Track notified incidents by ID
+	notifiedIncidents := make(map[int]bool)
+
 	for {
 		incidents, err := fetchIncidents()
 		if err != nil {
@@ -116,7 +116,14 @@ func pollIncidents(startTime time.Time) {
 			continue
 		}
 
+		log.Printf("Processing %d incidents\n", len(incidents))
 		for _, incident := range incidents {
+			// Skip if we've already notified about this incident
+			if notifiedIncidents[incident.ID] {
+				log.Printf("Skipping already notified incident: %d\n", incident.ID)
+				continue
+			}
+
 			createdAt, err := time.Parse(timeFormat, strings.Split(incident.CreatedAt, ".")[0])
 			if err != nil {
 				log.Printf("Error parsing incident time: %v", err)
@@ -133,7 +140,11 @@ func pollIncidents(startTime time.Time) {
 
 				if err := notify(message); err != nil {
 					log.Printf("Failed to send notification: %v", err)
+					continue
 				}
+
+				// Mark incident as notified
+				notifiedIncidents[incident.ID] = true
 			}
 		}
 
