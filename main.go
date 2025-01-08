@@ -185,7 +185,7 @@ func sendHeartbeat() error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return fmt.Errorf("heartbeat failed with status code: %d", resp.StatusCode)
 	}
 
