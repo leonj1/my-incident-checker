@@ -18,4 +18,5 @@ vendor/
 go.work
 
 # Binary output
-my-incident-checker
+my-incident-checker*
+
