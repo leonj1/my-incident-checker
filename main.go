@@ -14,8 +14,10 @@ import (
 const (
 	notificationEndpoint = "https://ntfy.sh/dapidi_alerts"
 	incidentsEndpoint    = "https://status-api.joseserver.com/incidents/recent?count=10"
+	connectivityCheck    = "https://www.google.com"
 	pollInterval         = 60 * time.Second
 	timeFormat           = "2006-01-02T15:04:05.999999"
+	connectTimeout       = 10 * time.Second
 )
 
 type IncidentDetails struct {
@@ -43,6 +45,24 @@ type Incident struct {
 	CreatedAt    string            `json:"created_at"`
 	Incident     IncidentDetails   `json:"incident"`
 	History      []IncidentHistory `json:"history"`
+}
+
+func checkConnectivity() error {
+	client := &http.Client{
+		Timeout: connectTimeout,
+	}
+
+	resp, err := client.Get(connectivityCheck)
+	if err != nil {
+		return fmt.Errorf("connectivity check failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("connectivity check failed with status code: %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 func getNodeName() string {
@@ -75,7 +95,6 @@ func notify(message string) error {
 }
 
 func fetchIncidents() ([]Incident, error) {
-	log.Printf("Fetching incidents\n")
 	resp, err := http.Get(incidentsEndpoint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch incidents: %w", err)
@@ -96,7 +115,6 @@ func fetchIncidents() ([]Incident, error) {
 		return nil, fmt.Errorf("failed to parse incidents: %w", err)
 	}
 
-	log.Printf("Successfully fetched incidents: %d\n", len(incidents))
 	return incidents, nil
 }
 
@@ -109,6 +127,13 @@ func pollIncidents(startTime time.Time) {
 	notifiedIncidents := make(map[int]bool)
 
 	for {
+		// Check connectivity before polling
+		if err := checkConnectivity(); err != nil {
+			log.Printf("Internet connectivity issue: %v", err)
+			time.Sleep(pollInterval)
+			continue
+		}
+
 		incidents, err := fetchIncidents()
 		if err != nil {
 			log.Printf("Error polling incidents: %v", err)
@@ -116,11 +141,9 @@ func pollIncidents(startTime time.Time) {
 			continue
 		}
 
-		log.Printf("Processing %d incidents\n", len(incidents))
 		for _, incident := range incidents {
 			// Skip if we've already notified about this incident
 			if notifiedIncidents[incident.ID] {
-				log.Printf("Skipping already notified incident: %d\n", incident.ID)
 				continue
 			}
 
@@ -153,6 +176,14 @@ func pollIncidents(startTime time.Time) {
 }
 
 func main() {
+	// Check initial connectivity
+	if err := checkConnectivity(); err != nil {
+		log.Printf("Initial connectivity check failed: %v", err)
+		log.Printf("Will continue and retry during polling...")
+	} else {
+		log.Println("Internet connectivity confirmed")
+	}
+
 	nodeName := getNodeName()
 	startupMessage := fmt.Sprintf("%s is online", nodeName)
 
