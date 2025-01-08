@@ -1,7 +1,7 @@
 .PHONY: build build-arm build-amd32 all
 
 # Default build for current architecture
-build:
+build: build-arm build-amd32
 	go build -o my-incident-checker main.go
 
 # Build for ARM (e.g., Raspberry Pi)
