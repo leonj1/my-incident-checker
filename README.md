@@ -3,7 +3,7 @@
 A watcher for service incidents.
 A Go-based monitoring application that checks for service incidents and sends notifications via ntfy.sh.
 
-![image](image.png)
+![image](image.jpg)
 
 ## Purpose
 
