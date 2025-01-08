@@ -75,22 +75,31 @@ func notify(message string) error {
 }
 
 func fetchIncidents() ([]Incident, error) {
+	log.Printf("Fetching incidents\n")
 	resp, err := http.Get(incidentsEndpoint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch incidents: %w", err)
 	}
 	defer resp.Body.Close()
+	log.Printf("Received response from incidents API\n")
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code from incidents API: %d", resp.StatusCode)
+	}
+
+	log.Printf("Reading response body\n")
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
+	log.Printf("Parsing response body\n")
 	var incidents []Incident
 	if err := json.Unmarshal(body, &incidents); err != nil {
 		return nil, fmt.Errorf("failed to parse incidents: %w", err)
 	}
 
+	log.Printf("Successfully fetched incidents\n")
 	return incidents, nil
 }
 
