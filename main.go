@@ -4,12 +4,24 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 )
 
 const (
 	notificationEndpoint = "https://ntfy.sh/dapidi_alerts"
 )
+
+func getNodeName() string {
+	nodeName := os.Getenv("NODE_NAME")
+	if nodeName == "" {
+		nodeName = os.Getenv("HOSTNAME")
+	}
+	if nodeName == "" {
+		nodeName = "unknown"
+	}
+	return nodeName
+}
 
 func notify(message string) error {
 	if message == "" {
@@ -30,7 +42,10 @@ func notify(message string) error {
 }
 
 func main() {
-	if err := notify("Hi"); err != nil {
+	nodeName := getNodeName()
+	message := fmt.Sprintf("%s is online", nodeName)
+
+	if err := notify(message); err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("Notification sent successfully")
