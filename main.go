@@ -15,7 +15,9 @@ const (
 	notificationEndpoint = "https://ntfy.sh/dapidi_alerts"
 	incidentsEndpoint    = "https://status-api.joseserver.com/incidents/recent?count=10"
 	connectivityCheck    = "https://www.google.com"
+	heartbeatEndpoint    = "https://nosnch.in/2b7bdbea9e"
 	pollInterval         = 60 * time.Second
+	heartbeatInterval    = 5 * time.Minute
 	timeFormat           = "2006-01-02T15:04:05.999999"
 	connectTimeout       = 10 * time.Second
 )
@@ -175,6 +177,35 @@ func pollIncidents(startTime time.Time) {
 	}
 }
 
+func sendHeartbeat() error {
+	payload := strings.NewReader("m=just checking in")
+	resp, err := http.Post(heartbeatEndpoint, "application/x-www-form-urlencoded", payload)
+	if err != nil {
+		return fmt.Errorf("failed to send heartbeat: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("heartbeat failed with status code: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+func runHeartbeat() {
+	ticker := time.NewTicker(heartbeatInterval)
+	defer ticker.Stop()
+
+	for {
+		if err := sendHeartbeat(); err != nil {
+			log.Printf("Heartbeat error: %v", err)
+		} else {
+			log.Printf("Heartbeat sent successfully")
+		}
+		<-ticker.C
+	}
+}
+
 func main() {
 	// Check initial connectivity
 	if err := checkConnectivity(); err != nil {
@@ -191,6 +222,9 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Println("Startup notification sent successfully")
+
+	// Start heartbeat in a goroutine
+	go runHeartbeat()
 
 	startTime := time.Now()
 	fmt.Printf("Starting incident polling at %s\n", startTime.Format(time.RFC3339))
