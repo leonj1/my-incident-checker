@@ -248,7 +248,13 @@ func pollIncidents(startTime time.Time, light *Light) {
 			continue
 		}
 
+		var mostRecentIncident *Incident = nil
+		var notificationSent bool = false
 		for _, incident := range incidents {
+			if incident.CreatedAt > mostRecentIncident.CreatedAt {
+				mostRecentIncident = &incident
+			}
+
 			// Skip if we've already notified about this incident
 			if notifiedIncidents[incident.ID] {
 				continue
@@ -269,6 +275,7 @@ func pollIncidents(startTime time.Time, light *Light) {
 					incident.Incident.Description,
 					incident.Incident.URL)
 
+				notificationSent = true
 				light.On(RED_ON)
 				if err := notify(message); err != nil {
 					log.Printf("Failed to send notification: %v", err)
@@ -281,11 +288,9 @@ func pollIncidents(startTime time.Time, light *Light) {
 		}
 
 		// Update tower light based on most recent incident state
-		if len(incidents) > 0 {
-			mostRecent := incidents[0]
-
+		if mostRecentIncident != nil && !notificationSent {
 			// if mostRecent.CurrentState is "operational" or "maintenance", skip
-			if mostRecent.CurrentState == "operational" || mostRecent.CurrentState == "maintenance" {
+			if mostRecentIncident.CurrentState == "operational" || mostRecentIncident.CurrentState == "maintenance" {
 				light.On(GREEN_ON)
 			}
 		}
