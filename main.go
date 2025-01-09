@@ -78,6 +78,67 @@ func sendCommand(port *serial.Port, cmd byte) error {
 	return err
 }
 
+type Light struct {
+}
+
+func (l *Light) On(onCmd byte) error {
+	// Configure serial port settings
+	c := &serial.Config{
+		Name: serialPort,
+		Baud: baudRate,
+	}
+
+	// Open the serial port
+	s, err := serial.OpenPort(c)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := s.Close(); err != nil {
+			log.Printf("Error closing serial port: %v", err)
+		}
+	}()
+
+	if err := sendCommand(s, onCmd); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (l *Light) Clear() error {
+	// Configure serial port settings
+	c := &serial.Config{
+		Name: serialPort,
+		Baud: baudRate,
+	}
+
+	// Open the serial port
+	s, err := serial.OpenPort(c)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := s.Close(); err != nil {
+			log.Printf("Error closing serial port: %v", err)
+		}
+	}()
+
+	// Clean up any old state by turning off all LEDs and buzzer
+	initialCommands := []byte{
+		BUZZER_OFF,
+		RED_OFF,
+		YELLOW_OFF,
+		GREEN_OFF,
+	}
+
+	for _, cmd := range initialCommands {
+		if err := sendCommand(s, cmd); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ControlTowerLight performs the sequence of commands to control the tower light
 func ControlTowerLight() error {
 	// Configure serial port settings
@@ -262,7 +323,7 @@ func isRelevantState(state string) bool {
 	return state == "outage" || state == "degraded"
 }
 
-func pollIncidents(startTime time.Time) {
+func pollIncidents(startTime time.Time, light *Light) {
 	// Track notified incidents by ID
 	notifiedIncidents := make(map[int]bool)
 
@@ -270,6 +331,7 @@ func pollIncidents(startTime time.Time) {
 		// Check connectivity before polling
 		if err := checkConnectivity(); err != nil {
 			log.Printf("Internet connectivity issue: %v", err)
+			light.On(YELLOW_ON)
 			time.Sleep(pollInterval)
 			continue
 		}
@@ -277,6 +339,7 @@ func pollIncidents(startTime time.Time) {
 		incidents, err := fetchIncidents()
 		if err != nil {
 			log.Printf("Error polling incidents: %v", err)
+			light.On(YELLOW_ON)
 			time.Sleep(pollInterval)
 			continue
 		}
@@ -290,6 +353,7 @@ func pollIncidents(startTime time.Time) {
 			createdAt, err := time.Parse(timeFormat, strings.Split(incident.CreatedAt, ".")[0])
 			if err != nil {
 				log.Printf("Error parsing incident time: %v", err)
+				light.On(YELLOW_ON)
 				continue
 			}
 
@@ -301,6 +365,7 @@ func pollIncidents(startTime time.Time) {
 					incident.Incident.Description,
 					incident.Incident.URL)
 
+				light.On(RED_ON)
 				if err := notify(message); err != nil {
 					log.Printf("Failed to send notification: %v", err)
 					continue
@@ -361,16 +426,17 @@ func main() {
 	}
 	fmt.Println("Startup notification sent successfully")
 
-	log.Println("Executing tower light sequence...")
-	if err := ControlTowerLight(); err != nil {
-		log.Fatalf("Error controlling tower light: %v", err)
+	// Initialize tower light
+	light := &Light{}
+	if err := light.Clear(); err != nil {
+		log.Fatalf("Error clearing tower light: %v", err)
 	}
-	log.Println("Tower light sequence completed successfully.")
+	log.Println("Initialized tower light.")
 
 	// Start heartbeat in a goroutine
 	go runHeartbeat()
 
 	startTime := time.Now()
 	fmt.Printf("Starting incident polling at %s\n", startTime.Format(time.RFC3339))
-	pollIncidents(startTime)
+	pollIncidents(startTime, light)
 }
