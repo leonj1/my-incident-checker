@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -343,41 +342,6 @@ func AlertLogic(incidents []Incident, light *Light, notifiedIncidents map[int]bo
 
 func parseIncidentTime(incident Incident) (time.Time, error) {
 	return time.Parse(timeFormat, strings.Split(incident.CreatedAt, ".")[0])
-}
-
-func updateMostRecent(incident *Incident, mostRecentIncident *Incident) *Incident {
-	if mostRecentIncident == nil {
-		return incident
-	}
-
-	if incident.CreatedAt > mostRecentIncident.CreatedAt {
-		return incident
-	}
-
-	return mostRecentIncident
-}
-
-func processNewIncident(incident Incident, light *Light) error {
-	fmt.Println("Send notification")
-	message := fmt.Sprintf("New incident for %s service: %s\nState: %s\nDescription: %s\nURL: %s",
-		incident.Service,
-		incident.Incident.Title,
-		incident.CurrentState,
-		incident.Incident.Description,
-		incident.Incident.URL)
-
-	fmt.Println("Set light to red")
-	light.Clear()
-	err := light.On(RED_ON)
-	time.Sleep(1 * time.Second)
-	if err != nil {
-		return errors.New("failed to set red light")
-	}
-	if err := notify(message); err != nil {
-		return errors.New("failed to send notification")
-	}
-
-	return nil
 }
 
 func isNormalState(state string) bool {
