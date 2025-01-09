@@ -257,6 +257,7 @@ func pollIncidents(startTime time.Time, light *Light) {
 
 	// Track notified incidents by ID
 	notifiedIncidents := make(map[int]bool)
+	seenIncidents := make(map[int]bool)
 
 	for {
 		// Check connectivity before polling
@@ -274,7 +275,16 @@ func pollIncidents(startTime time.Time, light *Light) {
 			continue
 		}
 
-		state, err := AlertLogic(incidents, light, notifiedIncidents, startTime)
+		newIncidents := []Incident{}
+		// check if we have seen any new incidents
+		for _, incident := range incidents {
+			if !seenIncidents[incident.ID] {
+				newIncidents = append(newIncidents, incident)
+				seenIncidents[incident.ID] = true
+			}
+		}
+
+		state, err := AlertLogic(newIncidents, light, notifiedIncidents, startTime)
 		if err != nil {
 			fmt.Printf("Problem with alert logic: %s", err.Error())
 		} else {
