@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/tarm/serial"
 )
 
 const (
@@ -20,6 +22,27 @@ const (
 	heartbeatInterval    = 5 * time.Minute
 	timeFormat           = "2006-01-02T15:04:05.999999"
 	connectTimeout       = 10 * time.Second
+
+	serialPort = "COM57" // Change to the serial/COM port of the tower light
+	// serialPort = "/dev/USBserial0" // Uncomment and use this on macOS/Linux
+	baudRate = 9600
+
+	// Command bytes for LEDs and buzzer
+	RED_ON    = 0x11
+	RED_OFF   = 0x21
+	RED_BLINK = 0x41
+
+	YELLOW_ON    = 0x12
+	YELLOW_OFF   = 0x22
+	YELLOW_BLINK = 0x42
+
+	GREEN_ON    = 0x14
+	GREEN_OFF   = 0x24
+	GREEN_BLINK = 0x44
+
+	BUZZER_ON    = 0x18
+	BUZZER_OFF   = 0x28
+	BUZZER_BLINK = 0x48
 )
 
 type IncidentDetails struct {
@@ -47,6 +70,121 @@ type Incident struct {
 	CreatedAt    string            `json:"created_at"`
 	Incident     IncidentDetails   `json:"incident"`
 	History      []IncidentHistory `json:"history"`
+}
+
+// sendCommand writes a single byte command to the serial port
+func sendCommand(port *serial.Port, cmd byte) error {
+	_, err := port.Write([]byte{cmd})
+	return err
+}
+
+// ControlTowerLight performs the sequence of commands to control the tower light
+func ControlTowerLight() error {
+	// Configure serial port settings
+	c := &serial.Config{
+		Name: serialPort,
+		Baud: baudRate,
+	}
+
+	// Open the serial port
+	s, err := serial.OpenPort(c)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := s.Close(); err != nil {
+			log.Printf("Error closing serial port: %v", err)
+		}
+	}()
+
+	// Clean up any old state by turning off all LEDs and buzzer
+	initialCommands := []byte{
+		BUZZER_OFF,
+		RED_OFF,
+		YELLOW_OFF,
+		GREEN_OFF,
+	}
+
+	for _, cmd := range initialCommands {
+		if err := sendCommand(s, cmd); err != nil {
+			return err
+		}
+	}
+
+	// Function to turn on an LED, wait, and turn it off
+	toggleLED := func(onCmd, offCmd byte, duration time.Duration) error {
+		if err := sendCommand(s, onCmd); err != nil {
+			return err
+		}
+		time.Sleep(duration)
+		if err := sendCommand(s, offCmd); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Turn on and off each LED with 0.5-second intervals
+	if err := toggleLED(RED_ON, RED_OFF, 500*time.Millisecond); err != nil {
+		return err
+	}
+
+	if err := toggleLED(YELLOW_ON, YELLOW_OFF, 500*time.Millisecond); err != nil {
+		return err
+	}
+
+	if err := toggleLED(GREEN_ON, GREEN_OFF, 500*time.Millisecond); err != nil {
+		return err
+	}
+
+	// Activate the buzzer for 0.1 seconds
+	if err := sendCommand(s, BUZZER_ON); err != nil {
+		return err
+	}
+	time.Sleep(100 * time.Millisecond)
+	if err := sendCommand(s, BUZZER_OFF); err != nil {
+		return err
+	}
+
+	// Function to activate blinking mode for an LED, wait, and turn it off
+	blinkLED := func(blinkCmd, offCmd byte, duration time.Duration) error {
+		if err := sendCommand(s, blinkCmd); err != nil {
+			return err
+		}
+		time.Sleep(duration)
+		if err := sendCommand(s, offCmd); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Activate blink modes for each LED for 3 seconds
+	if err := blinkLED(RED_BLINK, RED_OFF, 3*time.Second); err != nil {
+		return err
+	}
+
+	if err := blinkLED(YELLOW_BLINK, YELLOW_OFF, 3*time.Second); err != nil {
+		return err
+	}
+
+	if err := blinkLED(GREEN_BLINK, GREEN_OFF, 3*time.Second); err != nil {
+		return err
+	}
+
+	// Final cleanup: turn off all LEDs and buzzer
+	finalCommands := []byte{
+		BUZZER_OFF,
+		RED_OFF,
+		YELLOW_OFF,
+		GREEN_OFF,
+	}
+
+	for _, cmd := range finalCommands {
+		if err := sendCommand(s, cmd); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func checkConnectivity() error {
@@ -222,6 +360,12 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Println("Startup notification sent successfully")
+
+	log.Println("Executing tower light sequence...")
+	if err := ControlTowerLight(); err != nil {
+		log.Fatalf("Error controlling tower light: %v", err)
+	}
+	log.Println("Tower light sequence completed successfully.")
 
 	// Start heartbeat in a goroutine
 	go runHeartbeat()
