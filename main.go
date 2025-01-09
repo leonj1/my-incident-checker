@@ -251,8 +251,12 @@ func pollIncidents(startTime time.Time, light *Light) {
 		var mostRecentIncident *Incident = nil
 		var notificationSent bool = false
 		for _, incident := range incidents {
-			if incident.CreatedAt > mostRecentIncident.CreatedAt {
+			if mostRecentIncident == nil {
 				mostRecentIncident = &incident
+			} else {
+				if incident.CreatedAt > mostRecentIncident.CreatedAt {
+					mostRecentIncident = &incident
+				}
 			}
 
 			// Skip if we've already notified about this incident
