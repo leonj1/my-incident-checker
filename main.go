@@ -27,6 +27,12 @@ const (
 	serialPort = "/dev/ttyUSB0" // Change to the serial/COM port of the tower light
 	baudRate   = 9600
 
+	stateOperational = "operational"
+	stateMaintenance = "maintenance"
+	stateCritical    = "critical"
+	stateOutage      = "outage"
+	stateDegraded    = "degraded"
+
 	// Command bytes for LEDs and buzzer
 	RED_ON    byte = 0x11
 	RED_OFF   byte = 0x21
@@ -226,7 +232,7 @@ func fetchIncidents() ([]Incident, error) {
 }
 
 func isRelevantState(state string) bool {
-	return state == "outage" || state == "degraded"
+	return state == stateCritical || state == stateOutage || state == stateDegraded
 }
 
 func sendCommand(port *serial.Port, cmd byte) error {
@@ -302,9 +308,6 @@ func AlertLogic(incidents []Incident, light *Light, notifiedIncidents map[int]bo
 		mostRecentIncident = updateMostRecent(&incidentCopy, mostRecentIncident)
 
 		if isRelevantState(incident.CurrentState) {
-			if err := processNewIncident(incident, light); err != nil {
-				return YellowLight{}, fmt.Errorf("failed to process incident: %v", err)
-			}
 			notificationSent = true
 			notifiedIncidents[incident.ID] = true
 			return RedLight{}, nil
@@ -359,7 +362,7 @@ func processNewIncident(incident Incident, light *Light) error {
 }
 
 func isNormalState(state string) bool {
-	return state == "operational" || state == "maintenance"
+	return state == stateOperational || state == stateMaintenance
 }
 
 func sendHeartbeat() error {
