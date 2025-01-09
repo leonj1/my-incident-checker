@@ -12,5 +12,8 @@ build-arm:
 build-amd32:
 	GOOS=linux GOARCH=386 go build -o my-incident-checker-386 main.go
 
+test:
+	go test ./...
+
 # Build all architectures
 all: build build-arm build-amd32

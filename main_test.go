@@ -1,9 +1,9 @@
 package main
 
 import (
+	"reflect"
 	"testing"
 	"time"
-	"reflect"
 )
 
 func TestAlertLogic(t *testing.T) {
@@ -14,9 +14,9 @@ func TestAlertLogic(t *testing.T) {
 		name              string
 		incidents         []Incident
 		notifiedIncidents map[int]bool
-		startTime        time.Time
-		wantState        LightState
-		wantErr          bool
+		startTime         time.Time
+		wantState         LightState
+		wantErr           bool
 	}{
 		{
 			name: "new critical incident",
@@ -33,9 +33,9 @@ func TestAlertLogic(t *testing.T) {
 				},
 			},
 			notifiedIncidents: map[int]bool{},
-			startTime:        startTime,
-			wantState:        RedLight{},
-			wantErr:         false,
+			startTime:         startTime,
+			wantState:         RedLight{},
+			wantErr:           false,
 		},
 		{
 			name: "already notified incident",
@@ -52,9 +52,9 @@ func TestAlertLogic(t *testing.T) {
 				},
 			},
 			notifiedIncidents: map[int]bool{1: true},
-			startTime:        startTime,
-			wantState:        nil,
-			wantErr:         false,
+			startTime:         startTime,
+			wantState:         nil,
+			wantErr:           false,
 		},
 		{
 			name: "old incident",
@@ -71,9 +71,9 @@ func TestAlertLogic(t *testing.T) {
 				},
 			},
 			notifiedIncidents: map[int]bool{},
-			startTime:        startTime,
-			wantState:        nil,
-			wantErr:         false,
+			startTime:         startTime,
+			wantState:         nil,
+			wantErr:           false,
 		},
 		{
 			name: "operational state",
@@ -90,9 +90,9 @@ func TestAlertLogic(t *testing.T) {
 				},
 			},
 			notifiedIncidents: map[int]bool{},
-			startTime:        startTime,
-			wantState:        GreenLight{},
-			wantErr:         false,
+			startTime:         startTime,
+			wantState:         GreenLight{},
+			wantErr:           false,
 		},
 		{
 			name: "maintenance state",
@@ -109,9 +109,9 @@ func TestAlertLogic(t *testing.T) {
 				},
 			},
 			notifiedIncidents: map[int]bool{},
-			startTime:        startTime,
-			wantState:        GreenLight{},
-			wantErr:         false,
+			startTime:         startTime,
+			wantState:         GreenLight{},
+			wantErr:           false,
 		},
 		{
 			name: "multiple incidents - most recent critical",
@@ -138,9 +138,38 @@ func TestAlertLogic(t *testing.T) {
 				},
 			},
 			notifiedIncidents: map[int]bool{},
-			startTime:        startTime,
-			wantState:        RedLight{},
-			wantErr:         false,
+			startTime:         startTime,
+			wantState:         RedLight{},
+			wantErr:           false,
+		},
+		{
+			name: "multiple incidents - most recent operational",
+			incidents: []Incident{
+				{
+					ID:           1,
+					Service:      "database",
+					CurrentState: "critical",
+					CreatedAt:    "2025-01-09T03:18:00",
+					Incident: IncidentDetails{
+						Title:       "Database Down",
+						Description: "Database not responding",
+					},
+				},
+				{
+					ID:           2,
+					Service:      "api",
+					CurrentState: "operational",
+					CreatedAt:    "2025-01-09T03:19:00",
+					Incident: IncidentDetails{
+						Title:       "API Recovered",
+						Description: "API is back online",
+					},
+				},
+			},
+			notifiedIncidents: map[int]bool{},
+			startTime:         startTime,
+			wantState:         GreenLight{},
+			wantErr:           false,
 		},
 		{
 			name: "invalid time format",
@@ -157,16 +186,16 @@ func TestAlertLogic(t *testing.T) {
 				},
 			},
 			notifiedIncidents: map[int]bool{},
-			startTime:        startTime,
-			wantState:        YellowLight{},
-			wantErr:         true,
+			startTime:         startTime,
+			wantState:         YellowLight{},
+			wantErr:           true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gotState, err := AlertLogic(tt.incidents, light, tt.notifiedIncidents, tt.startTime)
-			
+
 			if (err != nil) != tt.wantErr {
 				t.Errorf("AlertLogic() error = %v, wantErr %v", err, tt.wantErr)
 				return

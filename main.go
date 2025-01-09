@@ -286,15 +286,43 @@ func pollIncidents(startTime time.Time, light *Light) {
 	}
 }
 
-func AlertLogic(incidents []Incident, light *Light, notifiedIncidents map[int]bool, startTime time.Time) (LightState, error) {
-	var mostRecentIncident *Incident
-	notificationSent := false
+func sortIncidentsByTime(incidents []Incident) []Incident {
+	sorted := make([]Incident, len(incidents))
+	copy(sorted, incidents)
 
-	for _, incident := range incidents {
-		if notifiedIncidents[incident.ID] {
-			continue
+	for i := 0; i < len(sorted)-1; i++ {
+		for j := i + 1; j < len(sorted); j++ {
+			if sorted[i].CreatedAt < sorted[j].CreatedAt {
+				sorted[i], sorted[j] = sorted[j], sorted[i]
+			}
 		}
+	}
 
+	return sorted
+}
+
+func AlertLogic(incidents []Incident, light *Light, notifiedIncidents map[int]bool, startTime time.Time) (LightState, error) {
+	if len(incidents) == 0 {
+		return nil, nil
+	}
+
+	// Sort incidents by creation time, most recent first
+	sortedIncidents := sortIncidentsByTime(incidents)
+	mostRecent := sortedIncidents[0]
+
+	// First check the most recent incident
+	createdAt, err := parseIncidentTime(mostRecent)
+	if err != nil {
+		return YellowLight{}, fmt.Errorf("error parsing incident time: %v", err)
+	}
+
+	if createdAt.After(startTime) && isNormalState(mostRecent.CurrentState) {
+		fmt.Printf("Notification not sent for incident: %s [%s]\n", mostRecent.Incident.Title, mostRecent.CurrentState)
+		return GreenLight{}, nil
+	}
+
+	// Then check for any unnotified critical incidents
+	for _, incident := range sortedIncidents {
 		createdAt, err := parseIncidentTime(incident)
 		if err != nil {
 			return YellowLight{}, fmt.Errorf("error parsing incident time: %v", err)
@@ -304,19 +332,10 @@ func AlertLogic(incidents []Incident, light *Light, notifiedIncidents map[int]bo
 			continue
 		}
 
-		incidentCopy := incident
-		mostRecentIncident = updateMostRecent(&incidentCopy, mostRecentIncident)
-
-		if isRelevantState(incident.CurrentState) {
-			notificationSent = true
+		if !notifiedIncidents[incident.ID] && isRelevantState(incident.CurrentState) {
 			notifiedIncidents[incident.ID] = true
 			return RedLight{}, nil
 		}
-	}
-
-	if mostRecentIncident != nil && !notificationSent && isNormalState(mostRecentIncident.CurrentState) {
-		fmt.Printf("Notification not sent for incident: %s [%s]\n", mostRecentIncident.Incident.Title, mostRecentIncident.CurrentState)
-		return GreenLight{}, nil
 	}
 
 	return nil, nil
