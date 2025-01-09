@@ -297,6 +297,8 @@ func pollIncidents(startTime time.Time, light *Light) {
 			if mostRecentIncident.CurrentState == "operational" || mostRecentIncident.CurrentState == "maintenance" {
 				light.On(GREEN_ON)
 			}
+		} else {
+			notificationSent = false
 		}
 
 		time.Sleep(pollInterval)
