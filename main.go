@@ -18,7 +18,7 @@ const (
 	incidentsEndpoint    = "https://status-api.joseserver.com/incidents/recent?count=10"
 	connectivityCheck    = "https://www.google.com"
 	heartbeatEndpoint    = "https://nosnch.in/2b7bdbea9e"
-	pollInterval         = 60 * time.Second
+	pollInterval         = 5 * time.Second
 	heartbeatInterval    = 5 * time.Minute
 	timeFormat           = "2006-01-02T15:04:05.999999"
 	connectTimeout       = 10 * time.Second
