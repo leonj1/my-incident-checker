@@ -24,8 +24,7 @@ const (
 	connectTimeout       = 10 * time.Second
 
 	serialPort = "/dev/ttyUSB0" // Change to the serial/COM port of the tower light
-	// serialPort = "/dev/USBserial0" // Uncomment and use this on macOS/Linux
-	baudRate = 9600
+	baudRate   = 9600
 
 	// Command bytes for LEDs and buzzer
 	RED_ON    = 0x11
@@ -70,12 +69,6 @@ type Incident struct {
 	CreatedAt    string            `json:"created_at"`
 	Incident     IncidentDetails   `json:"incident"`
 	History      []IncidentHistory `json:"history"`
-}
-
-// sendCommand writes a single byte command to the serial port
-func sendCommand(port *serial.Port, cmd byte) error {
-	_, err := port.Write([]byte{cmd})
-	return err
 }
 
 type Light struct {
@@ -136,115 +129,6 @@ func (l *Light) Clear() error {
 			return err
 		}
 	}
-	return nil
-}
-
-// ControlTowerLight performs the sequence of commands to control the tower light
-func ControlTowerLight() error {
-	// Configure serial port settings
-	c := &serial.Config{
-		Name: serialPort,
-		Baud: baudRate,
-	}
-
-	// Open the serial port
-	s, err := serial.OpenPort(c)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := s.Close(); err != nil {
-			log.Printf("Error closing serial port: %v", err)
-		}
-	}()
-
-	// Clean up any old state by turning off all LEDs and buzzer
-	initialCommands := []byte{
-		BUZZER_OFF,
-		RED_OFF,
-		YELLOW_OFF,
-		GREEN_OFF,
-	}
-
-	for _, cmd := range initialCommands {
-		if err := sendCommand(s, cmd); err != nil {
-			return err
-		}
-	}
-
-	// Function to turn on an LED, wait, and turn it off
-	toggleLED := func(onCmd, offCmd byte, duration time.Duration) error {
-		if err := sendCommand(s, onCmd); err != nil {
-			return err
-		}
-		time.Sleep(duration)
-		if err := sendCommand(s, offCmd); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	// Turn on and off each LED with 0.5-second intervals
-	if err := toggleLED(RED_ON, RED_OFF, 500*time.Millisecond); err != nil {
-		return err
-	}
-
-	if err := toggleLED(YELLOW_ON, YELLOW_OFF, 500*time.Millisecond); err != nil {
-		return err
-	}
-
-	if err := toggleLED(GREEN_ON, GREEN_OFF, 500*time.Millisecond); err != nil {
-		return err
-	}
-
-	// Activate the buzzer for 0.1 seconds
-	if err := sendCommand(s, BUZZER_ON); err != nil {
-		return err
-	}
-	time.Sleep(100 * time.Millisecond)
-	if err := sendCommand(s, BUZZER_OFF); err != nil {
-		return err
-	}
-
-	// Function to activate blinking mode for an LED, wait, and turn it off
-	blinkLED := func(blinkCmd, offCmd byte, duration time.Duration) error {
-		if err := sendCommand(s, blinkCmd); err != nil {
-			return err
-		}
-		time.Sleep(duration)
-		if err := sendCommand(s, offCmd); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	// Activate blink modes for each LED for 3 seconds
-	if err := blinkLED(RED_BLINK, RED_OFF, 3*time.Second); err != nil {
-		return err
-	}
-
-	if err := blinkLED(YELLOW_BLINK, YELLOW_OFF, 3*time.Second); err != nil {
-		return err
-	}
-
-	if err := blinkLED(GREEN_BLINK, GREEN_OFF, 3*time.Second); err != nil {
-		return err
-	}
-
-	// Final cleanup: turn off all LEDs and buzzer
-	finalCommands := []byte{
-		BUZZER_OFF,
-		RED_OFF,
-		YELLOW_OFF,
-		GREEN_OFF,
-	}
-
-	for _, cmd := range finalCommands {
-		if err := sendCommand(s, cmd); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -323,7 +207,27 @@ func isRelevantState(state string) bool {
 	return state == "outage" || state == "degraded"
 }
 
+func sendCommand(port *serial.Port, cmd byte) error {
+	_, err := port.Write([]byte{cmd})
+	return err
+}
+
 func pollIncidents(startTime time.Time, light *Light) {
+	// Configure serial port
+	c := &serial.Config{
+		Name: serialPort,
+		Baud: baudRate,
+	}
+
+	// Open the serial port
+	port, err := serial.OpenPort(c)
+	if err != nil {
+		log.Printf("Failed to open serial port: %v", err)
+		light.On(YELLOW_ON)
+		return
+	}
+	defer port.Close()
+
 	// Track notified incidents by ID
 	notifiedIncidents := make(map[int]bool)
 
@@ -373,6 +277,16 @@ func pollIncidents(startTime time.Time, light *Light) {
 
 				// Mark incident as notified
 				notifiedIncidents[incident.ID] = true
+			}
+		}
+
+		// Update tower light based on most recent incident state
+		if len(incidents) > 0 {
+			mostRecent := incidents[0]
+
+			// if mostRecent.CurrentState is "operational" or "maintenance", skip
+			if mostRecent.CurrentState == "operational" || mostRecent.CurrentState == "maintenance" {
+				light.On(GREEN_ON)
 			}
 		}
 
@@ -426,17 +340,12 @@ func main() {
 	}
 	fmt.Println("Startup notification sent successfully")
 
-	// Initialize tower light
-	light := &Light{}
-	if err := light.Clear(); err != nil {
-		log.Fatalf("Error clearing tower light: %v", err)
-	}
-	log.Println("Initialized tower light.")
+	light := Light{}
 
 	// Start heartbeat in a goroutine
 	go runHeartbeat()
 
 	startTime := time.Now()
 	fmt.Printf("Starting incident polling at %s\n", startTime.Format(time.RFC3339))
-	pollIncidents(startTime, light)
+	pollIncidents(startTime, &light)
 }
