@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -27,21 +28,21 @@ const (
 	baudRate   = 9600
 
 	// Command bytes for LEDs and buzzer
-	RED_ON    = 0x11
-	RED_OFF   = 0x21
-	RED_BLINK = 0x41
+	RED_ON    byte = 0x11
+	RED_OFF   byte = 0x21
+	RED_BLINK byte = 0x41
 
-	YELLOW_ON    = 0x12
-	YELLOW_OFF   = 0x22
-	YELLOW_BLINK = 0x42
+	YELLOW_ON    byte = 0x12
+	YELLOW_OFF   byte = 0x22
+	YELLOW_BLINK byte = 0x42
 
-	GREEN_ON    = 0x14
-	GREEN_OFF   = 0x24
-	GREEN_BLINK = 0x44
+	GREEN_ON    byte = 0x14
+	GREEN_OFF   byte = 0x24
+	GREEN_BLINK byte = 0x44
 
-	BUZZER_ON    = 0x18
-	BUZZER_OFF   = 0x28
-	BUZZER_BLINK = 0x48
+	BUZZER_ON    byte = 0x18
+	BUZZER_OFF   byte = 0x28
+	BUZZER_BLINK byte = 0x48
 )
 
 type IncidentDetails struct {
@@ -71,7 +72,26 @@ type Incident struct {
 	History      []IncidentHistory `json:"history"`
 }
 
-type Light struct {
+type Light struct{}
+
+type LightState interface {
+	Apply(light *Light) error
+}
+
+type RedLight struct{}
+type GreenLight struct{}
+type YellowLight struct{}
+
+func (s RedLight) Apply(light *Light) error {
+	return light.On(RED_ON)
+}
+
+func (s GreenLight) Apply(light *Light) error {
+	return light.On(GREEN_ON)
+}
+
+func (s YellowLight) Apply(light *Light) error {
+	return light.On(YELLOW_ON)
 }
 
 func (l *Light) On(onCmd byte) error {
@@ -244,83 +264,102 @@ func pollIncidents(startTime time.Time, light *Light) {
 
 		incidents, err := fetchIncidents()
 		if err != nil {
-			fmt.Printf("Error polling incidents: %v", err)
-			light.On(YELLOW_ON)
+			fmt.Errorf("failed to fetch incidents: %s", err.Error())
 			time.Sleep(pollInterval)
 			continue
 		}
 
-		var mostRecentIncident *Incident = nil
-		var notificationSent bool = false
-		for _, incident := range incidents {
-			// Skip if we've already notified about this incident
-			if notifiedIncidents[incident.ID] {
-				continue
-			}
-
-			createdAt, err := time.Parse(timeFormat, strings.Split(incident.CreatedAt, ".")[0])
-			if err != nil {
-				fmt.Printf("Error parsing incident time: %v", err)
-				err = light.On(YELLOW_ON)
-				if err != nil {
-					log.Printf("Failed to set yellow light: %s\n", err.Error())
-				}
-				time.Sleep(pollInterval)
-				continue
-			}
-
-			if createdAt.After(startTime) {
-				if mostRecentIncident == nil {
-					mostRecentIncident = &incident
-				} else {
-					if incident.CreatedAt > mostRecentIncident.CreatedAt {
-						mostRecentIncident = &incident
-					}
-				}
-				if isRelevantState(incident.CurrentState) {
-					fmt.Println("Send notification")
-					message := fmt.Sprintf("New incident for %s service: %s\nState: %s\nDescription: %s\nURL: %s",
-						incident.Service,
-						incident.Incident.Title,
-						incident.CurrentState,
-						incident.Incident.Description,
-						incident.Incident.URL)
-
-					notificationSent = true
-					fmt.Println("Set light to red")
-					light.Clear()
-					err = light.On(RED_ON)
-					time.Sleep(1 * time.Second)
-					if err != nil {
-						fmt.Printf("Failed to set red light: %s\n", err.Error())
-					}
-					if err := notify(message); err != nil {
-						log.Printf("Failed to send notification: %v", err)
-						continue
-					}
-
-					// Mark incident as notified
-					notifiedIncidents[incident.ID] = true
-				}
-			}
-		}
-
-		// Update tower light based on most recent incident state
-		if mostRecentIncident != nil {
-			fmt.Printf("Most recent incident is not nil: %s\n", mostRecentIncident.Incident.Title)
-			if !notificationSent {
-				fmt.Printf("Notification not sent for incident: %s [%s]\n", mostRecentIncident.Incident.Title, mostRecentIncident.CurrentState)
-				// if mostRecent.CurrentState is "operational" or "maintenance", skip
-				if mostRecentIncident.CurrentState == "operational" || mostRecentIncident.CurrentState == "maintenance" {
-					fmt.Println("Setting light green")
-					light.On(GREEN_ON)
-					mostRecentIncident = nil
-				}
-			}
+		state, err := AlertLogic(incidents, light, notifiedIncidents, startTime)
+		if err != nil {
+			fmt.Printf("Problem with alert logic: %s", err.Error())
+		} else {
+			state.Apply(light)
 		}
 
 		time.Sleep(pollInterval)
 	}
+}
+
+func AlertLogic(incidents []Incident, light *Light, notifiedIncidents map[int]bool, startTime time.Time) (LightState, error) {
+	var mostRecentIncident *Incident
+	notificationSent := false
+
+	for _, incident := range incidents {
+		if notifiedIncidents[incident.ID] {
+			continue
+		}
+
+		createdAt, err := parseIncidentTime(incident)
+		if err != nil {
+			return YellowLight{}, fmt.Errorf("error parsing incident time: %v", err)
+		}
+
+		if !createdAt.After(startTime) {
+			continue
+		}
+
+		incidentCopy := incident
+		mostRecentIncident = updateMostRecent(&incidentCopy, mostRecentIncident)
+
+		if isRelevantState(incident.CurrentState) {
+			if err := processNewIncident(incident, light); err != nil {
+				return YellowLight{}, fmt.Errorf("failed to process incident: %v", err)
+			}
+			notificationSent = true
+			notifiedIncidents[incident.ID] = true
+			return RedLight{}, nil
+		}
+	}
+
+	if mostRecentIncident != nil && !notificationSent && isNormalState(mostRecentIncident.CurrentState) {
+		fmt.Printf("Notification not sent for incident: %s [%s]\n", mostRecentIncident.Incident.Title, mostRecentIncident.CurrentState)
+		return GreenLight{}, nil
+	}
+
+	return nil, nil
+}
+
+func parseIncidentTime(incident Incident) (time.Time, error) {
+	return time.Parse(timeFormat, strings.Split(incident.CreatedAt, ".")[0])
+}
+
+func updateMostRecent(incident *Incident, mostRecentIncident *Incident) *Incident {
+	if mostRecentIncident == nil {
+		return incident
+	}
+
+	if incident.CreatedAt > mostRecentIncident.CreatedAt {
+		return incident
+	}
+
+	return mostRecentIncident
+}
+
+func processNewIncident(incident Incident, light *Light) error {
+	fmt.Println("Send notification")
+	message := fmt.Sprintf("New incident for %s service: %s\nState: %s\nDescription: %s\nURL: %s",
+		incident.Service,
+		incident.Incident.Title,
+		incident.CurrentState,
+		incident.Incident.Description,
+		incident.Incident.URL)
+
+	fmt.Println("Set light to red")
+	light.Clear()
+	err := light.On(RED_ON)
+	time.Sleep(1 * time.Second)
+	if err != nil {
+		return errors.New("failed to set red light")
+	}
+	if err := notify(message); err != nil {
+		return errors.New("failed to send notification")
+	}
+
+	return nil
+}
+
+func isNormalState(state string) bool {
+	return state == "operational" || state == "maintenance"
 }
 
 func sendHeartbeat() error {
