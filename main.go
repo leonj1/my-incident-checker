@@ -23,7 +23,7 @@ const (
 	timeFormat           = "2006-01-02T15:04:05.999999"
 	connectTimeout       = 10 * time.Second
 
-	serialPort = "COM57" // Change to the serial/COM port of the tower light
+	serialPort = "/dev/ttyUSB0" // Change to the serial/COM port of the tower light
 	// serialPort = "/dev/USBserial0" // Uncomment and use this on macOS/Linux
 	baudRate = 9600
 
