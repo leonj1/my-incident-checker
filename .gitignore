@@ -20,3 +20,6 @@ go.work
 # Binary output
 my-incident-checker*
 
+# Release directory
+release/
+
