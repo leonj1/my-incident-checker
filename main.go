@@ -7,11 +7,53 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/tarm/serial"
 )
+
+// Log levels
+const (
+	LogDebug = "DEBUG"
+	LogInfo  = "INFO"
+	LogWarn  = "WARN"
+	LogError = "ERROR"
+)
+
+type Logger struct {
+	debugLog *log.Logger
+	infoLog  *log.Logger
+	warnLog  *log.Logger
+	errorLog *log.Logger
+}
+
+func NewLogger() (*Logger, error) {
+	// Create logs directory if it doesn't exist
+	logDir := "logs"
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return nil, err
+	}
+
+	// Create or append to log file with timestamp
+	currentTime := time.Now().Format("2006-01-02")
+	logFile := filepath.Join(logDir, "incident-checker-"+currentTime+".log")
+	file, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create multi-writer for both file and stdout
+	flags := log.LstdFlags | log.Lmicroseconds | log.LUTC
+
+	return &Logger{
+		debugLog: log.New(file, "DEBUG: ", flags),
+		infoLog:  log.New(file, "INFO:  ", flags),
+		warnLog:  log.New(file, "WARN:  ", flags),
+		errorLog: log.New(file, "ERROR: ", flags),
+	}, nil
+}
 
 const (
 	notificationEndpoint = "https://ntfy.sh/dapidi_alerts"
@@ -239,30 +281,26 @@ func sendCommand(port *serial.Port, cmd byte) error {
 	return err
 }
 
-func pollIncidents(startTime time.Time, light *Light) {
-	// Configure serial port
-	c := &serial.Config{
+func pollIncidents(startTime time.Time, light *Light, logger *Logger) {
+	logger.infoLog.Printf("Starting incident polling at %s", startTime.Format(time.RFC3339))
+
+	port, err := serial.OpenPort(&serial.Config{
 		Name: serialPort,
 		Baud: baudRate,
-	}
-
-	// Open the serial port
-	port, err := serial.OpenPort(c)
+	})
 	if err != nil {
-		log.Printf("Failed to open serial port: %v", err)
+		logger.errorLog.Printf("Failed to open serial port: %v", err)
 		light.On(YELLOW_ON)
 		return
 	}
 	defer port.Close()
 
-	// Track notified incidents by ID
 	notifiedIncidents := make(map[int]bool)
 	seenIncidents := make(map[int]bool)
 
 	for {
-		// Check connectivity before polling
 		if err := checkConnectivity(); err != nil {
-			fmt.Printf("Internet connectivity issue: %v", err)
+			logger.warnLog.Printf("Internet connectivity issue: %v", err)
 			light.On(YELLOW_ON)
 			time.Sleep(pollInterval)
 			continue
@@ -270,25 +308,29 @@ func pollIncidents(startTime time.Time, light *Light) {
 
 		incidents, err := fetchIncidents()
 		if err != nil {
-			fmt.Errorf("failed to fetch incidents: %s", err.Error())
+			logger.errorLog.Printf("Failed to fetch incidents: %v", err)
 			time.Sleep(pollInterval)
 			continue
 		}
 
-		newIncidents := []Incident{}
-		// check if we have seen any new incidents
+		logger.debugLog.Printf("Fetched %d incidents", len(incidents))
+
 		for _, incident := range incidents {
 			if !seenIncidents[incident.ID] {
-				newIncidents = append(newIncidents, incident)
+				logger.infoLog.Printf("New incident detected: [%s] %s - Current State: %s",
+					incident.Service,
+					incident.Incident.Title,
+					incident.CurrentState)
 				seenIncidents[incident.ID] = true
 			}
 		}
 
-		state, err := AlertLogic(newIncidents, light, notifiedIncidents, startTime)
+		// Log state changes
+		state, err := AlertLogic(incidents, light, notifiedIncidents, startTime)
 		if err != nil {
-			fmt.Printf("Problem with alert logic: %s", err.Error())
-		} else {
-			state.Apply(light)
+			logger.errorLog.Printf("Alert logic error: %v", err)
+		} else if state != nil {
+			logger.infoLog.Printf("Light state changed to: %T", state)
 		}
 
 		time.Sleep(pollInterval)
@@ -388,12 +430,19 @@ func runHeartbeat() {
 }
 
 func main() {
+	logger, err := NewLogger()
+	if err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+
+	logger.infoLog.Printf("Starting Incident Checker")
+
 	// Check initial connectivity
 	if err := checkConnectivity(); err != nil {
-		log.Printf("Initial connectivity check failed: %v", err)
-		log.Printf("Will continue and retry during polling...")
+		logger.warnLog.Printf("Initial connectivity check failed: %v", err)
+		logger.infoLog.Printf("Will continue and retry during polling...")
 	} else {
-		log.Println("Internet connectivity confirmed")
+		logger.infoLog.Printf("Internet connectivity confirmed")
 	}
 
 	nodeName := getNodeName()
@@ -423,6 +472,5 @@ func main() {
 	go runHeartbeat()
 
 	startTime := time.Now()
-	fmt.Printf("Starting incident polling at %s\n", startTime.Format(time.RFC3339))
-	pollIncidents(startTime, &light)
+	pollIncidents(startTime, &light, logger)
 }
