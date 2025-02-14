@@ -328,7 +328,7 @@ func pollIncidents(startTime time.Time, light *Light, logger *Logger) {
 		// Log state changes
 		state, err := AlertLogic(incidents, light, notifiedIncidents, startTime)
 		if err != nil {
-			logger.errorLog.Printf("Alert logic error: %v", err)
+			logger.errorLog.Printf("Alert logic error: %s", err.Error())
 		} else if state != nil {
 			logger.infoLog.Printf("Light state changed to: %T", state)
 		}
