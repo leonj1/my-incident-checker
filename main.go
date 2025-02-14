@@ -308,7 +308,7 @@ func pollIncidents(startTime time.Time, light *Light, logger *Logger) {
 
 		incidents, err := fetchIncidents()
 		if err != nil {
-			logger.errorLog.Printf("Failed to fetch incidents: %v", err)
+			logger.errorLog.Printf("Failed to fetch incidents: %s", err.Error())
 			time.Sleep(pollInterval)
 			continue
 		}
