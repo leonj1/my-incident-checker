@@ -429,6 +429,13 @@ func runHeartbeat() {
 	}
 }
 
+func verifyDownload(destPath string) error {
+	if _, err := os.Stat(destPath); os.IsNotExist(err) {
+		return fmt.Errorf("download verification failed: file %s does not exist", destPath)
+	}
+	return nil
+}
+
 func main() {
 	logger, err := NewLogger()
 	if err != nil {
