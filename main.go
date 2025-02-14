@@ -300,7 +300,7 @@ func pollIncidents(startTime time.Time, light *Light, logger *Logger) {
 
 	for {
 		if err := checkConnectivity(); err != nil {
-			logger.warnLog.Printf("Internet connectivity issue: %v", err)
+			logger.warnLog.Printf("Internet connectivity issue: %s", err.Error())
 			light.On(YELLOW_ON)
 			time.Sleep(pollInterval)
 			continue
