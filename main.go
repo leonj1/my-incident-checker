@@ -289,7 +289,7 @@ func pollIncidents(startTime time.Time, light *Light, logger *Logger) {
 		Baud: baudRate,
 	})
 	if err != nil {
-		logger.errorLog.Printf("Failed to open serial port: %v", err)
+		logger.errorLog.Printf("Failed to open serial port: %s", err.Error())
 		light.On(YELLOW_ON)
 		return
 	}
