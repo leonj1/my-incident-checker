@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/tarm/serial"
 )
 
@@ -257,7 +256,7 @@ func fetchIncidents() ([]Incident, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New(fmt.Sprintf("unexpected status code from incidents API: %d", resp.StatusCode))
+		return nil, fmt.Errorf("unexpected status code from incidents API: %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
