@@ -376,7 +376,7 @@ func AlertLogic(incidents []Incident, light *Light, notifiedIncidents map[int]bo
 	for _, incident := range sortedIncidents {
 		createdAt, err := parseIncidentTime(incident)
 		if err != nil {
-			return YellowLight{}, fmt.Errorf("error parsing incident time: %v", err)
+			return YellowLight{}, fmt.Errorf("error parsing incident time: %s", err.Error())
 		}
 
 		if !createdAt.After(startTime) {
