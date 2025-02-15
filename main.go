@@ -364,7 +364,7 @@ func AlertLogic(incidents []Incident, light *Light, notifiedIncidents map[int]bo
 	// First check the most recent incident
 	createdAt, err := parseIncidentTime(mostRecent)
 	if err != nil {
-		return YellowLight{}, fmt.Errorf("error parsing incident time: %v", err)
+		return YellowLight{}, fmt.Errorf("error parsing incident time: %s", err.Error())
 	}
 
 	if createdAt.After(startTime) && isNormalState(mostRecent.CurrentState) {
