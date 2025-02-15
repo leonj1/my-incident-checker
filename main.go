@@ -404,7 +404,7 @@ func sendHeartbeat() error {
 	payload := strings.NewReader("m=just checking in")
 	resp, err := http.Post(heartbeatEndpoint, "application/x-www-form-urlencoded", payload)
 	if err != nil {
-		return fmt.Errorf("failed to send heartbeat:: %w", err)
+		return fmt.Errorf("failed to send heartbeat:: %s", err.Error())
 	}
 	defer resp.Body.Close()
 
