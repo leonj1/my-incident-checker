@@ -435,6 +435,9 @@ func main() {
 		log.Fatalf("Failed to initialize logger: %s", err.Error())
 	}
 
+	// Add deferred exit log message
+	defer logger.infoLog.Printf("Program shutting down")
+
 	logger.infoLog.Printf("Starting Incident Checker")
 
 	// Check initial connectivity
