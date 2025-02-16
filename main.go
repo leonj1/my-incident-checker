@@ -181,7 +181,7 @@ func (l *Light) Clear() error {
 	}
 	defer func() {
 		if err := s.Close(); err != nil {
-			log.Printf("Error closing serial port: %v", err)
+			log.Printf("Error closing serial port: %s", err.Error())
 		}
 	}()
 
