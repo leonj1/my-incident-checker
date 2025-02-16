@@ -472,6 +472,8 @@ func main() {
 	light.On(GREEN_ON)
 
 	// Start heartbeat in a goroutine
+	fmt.Println("Starting heartbeat")
+	logger.infoLog.Printf("Starting heartbeat...")
 	go runHeartbeat()
 
 	startTime := time.Now()
