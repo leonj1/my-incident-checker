@@ -432,7 +432,7 @@ func runHeartbeat() {
 func main() {
 	logger, err := NewLogger()
 	if err != nil {
-		log.Fatalf("Failed to initialize logger: %v", err)
+		log.Fatalf("Failed to initialize logger: %s", err.Error())
 	}
 
 	logger.infoLog.Printf("Starting Incident Checker")
