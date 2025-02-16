@@ -421,9 +421,11 @@ func runHeartbeat() {
 
 	for {
 		if err := sendHeartbeat(); err != nil {
-			log.Printf("Heartbeat error: %s", err.Error())
+			fmt.Println(fmt.Sprintf("Heartbeat error: %s", err.Error()))
+			log.Printf("Heartbeat error:: %s", err.Error())
 		} else {
-			log.Printf("Heartbeat sent successfully")
+			fmt.Println(fmt.Sprintf("Heartbeat sent successfully."))
+			log.Printf("Heartbeat sent successfully..")
 		}
 		<-ticker.C
 	}
