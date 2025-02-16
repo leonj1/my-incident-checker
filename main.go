@@ -283,6 +283,7 @@ func sendCommand(port *serial.Port, cmd byte) error {
 
 func pollIncidents(startTime time.Time, light *Light, logger *Logger) {
 	logger.infoLog.Printf("Starting incident polling at %s", startTime.Format(time.RFC3339))
+	fmt.Printf("*** Starting incident polling at %s\n", startTime.Format(time.RFC3339))
 
 	port, err := serial.OpenPort(&serial.Config{
 		Name: serialPort,
