@@ -421,7 +421,7 @@ func runHeartbeat() {
 
 	for {
 		if err := sendHeartbeat(); err != nil {
-			log.Printf("Heartbeat error: %v", err)
+			log.Printf("Heartbeat error: %s", err.Error())
 		} else {
 			log.Printf("Heartbeat sent successfully")
 		}
