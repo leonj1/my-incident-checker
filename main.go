@@ -439,7 +439,7 @@ func main() {
 
 	// Check initial connectivity
 	if err := checkConnectivity(); err != nil {
-		logger.warnLog.Printf("Initial connectivity check failed: %v", err)
+		logger.warnLog.Printf("Initial connectivity check failed: %s", err.Error())
 		logger.infoLog.Printf("Will continue and retry during polling...")
 	} else {
 		logger.infoLog.Printf("Internet connectivity confirmed")
