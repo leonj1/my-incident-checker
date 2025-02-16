@@ -416,10 +416,13 @@ func sendHeartbeat() error {
 }
 
 func runHeartbeat() {
+	fmt.Printf("In runHeartbeat\n")
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
 
+	fmt.Printf("Starting loop\n")
 	for {
+		fmt.Printf("Sending heartbeat\n")
 		if err := sendHeartbeat(); err != nil {
 			fmt.Printf("Heartbeat error: %s\n", err.Error())
 			log.Printf("Heartbeat error:: %s", err.Error())
@@ -427,8 +430,10 @@ func runHeartbeat() {
 			fmt.Printf("Heartbeat sent successfully.\n")
 			log.Printf("Heartbeat sent successfully..")
 		}
+		fmt.Printf("Finshed sending heartbeat\n")
 		<-ticker.C
 	}
+	fmt.Printf("Exiting runHeartbeat\n")
 }
 
 func main() {
