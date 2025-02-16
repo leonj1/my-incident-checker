@@ -483,6 +483,8 @@ func main() {
 	logger.infoLog.Printf("Starting heartbeat...")
 	go runHeartbeat()
 
+	fmt.Println("Polling for incidents")
 	startTime := time.Now()
 	pollIncidents(startTime, &light, logger)
+	fmt.Println("Stopped polling for incidents")
 }
