@@ -199,17 +199,6 @@ func (l *Light) Clear() error {
 	return nil
 }
 
-func getNodeName() string {
-	nodeName := os.Getenv("NODE_NAME")
-	if nodeName == "" {
-		nodeName = os.Getenv("HOSTNAME")
-	}
-	if nodeName == "" {
-		nodeName = "unknown"
-	}
-	return nodeName
-}
-
 func notify(message string) error {
 	if message == "" {
 		return fmt.Errorf("message cannot be empty")
