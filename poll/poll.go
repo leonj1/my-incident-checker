@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -99,13 +100,9 @@ func sortIncidentsByTime(incidents []types.Incident) []types.Incident {
 	sorted := make([]types.Incident, len(incidents))
 	copy(sorted, incidents)
 
-	for i := 0; i < len(sorted)-1; i++ {
-		for j := i + 1; j < len(sorted); j++ {
-			if sorted[i].CreatedAt < sorted[j].CreatedAt {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
-			}
-		}
-	}
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].CreatedAt > sorted[j].CreatedAt
+	})
 
 	return sorted
 }
