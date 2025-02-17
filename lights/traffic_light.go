@@ -53,7 +53,9 @@ func (l *TrafficLight) On(cmd interface{}) error {
 		return fmt.Errorf("unsupported state: %s", state)
 	}
 
-	l.Clear()
+	if err := l.Clear(); err != nil {
+		return fmt.Errorf("failed to clear light state: %w", err)
+	}
 
 	s, err := l.openPort()
 	if err != nil {
