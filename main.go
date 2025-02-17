@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"my-incident-checker/lights"
 )
 
 // Log levels
@@ -113,20 +115,25 @@ func main() {
 	}
 	fmt.Println("Startup notification sent successfully")
 
-	light := Light{}
+	// Initialize the light
+	light := lights.NewSerialLight("/dev/ttyUSB0", 9600)
 	light.Clear()
+
 	fmt.Println("Yellow light on for 2 seconds")
-	light.On(YELLOW_BLINK)
+	light.Blink(lights.StateYellow)
 	time.Sleep(2 * time.Second)
+
 	fmt.Println("Red light on for 2 seconds")
-	light.On(RED_BLINK)
+	light.Blink(lights.StateRed)
 	time.Sleep(2 * time.Second)
+
 	fmt.Println("Green light on for 2 seconds")
-	light.On(GREEN_BLINK)
+	light.Blink(lights.StateGreen)
 	time.Sleep(2 * time.Second)
+
 	light.Clear()
 	fmt.Println("Lights cleared")
-	light.On(GREEN_ON)
+	light.On(lights.StateGreen)
 
 	// Start heartbeat in a goroutine
 	fmt.Println("Starting heartbeat")
@@ -135,6 +142,6 @@ func main() {
 
 	fmt.Println("Polling for incidents")
 	startTime := time.Now()
-	pollIncidents(startTime, &light, logger)
+	pollIncidents(startTime, light, logger)
 	fmt.Println("Stopped polling for incidents")
 }

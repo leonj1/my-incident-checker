@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tarm/serial"
+	"my-incident-checker/lights"
 )
 
 const (
@@ -17,20 +17,9 @@ const (
 )
 
 // pollIncidents continuously monitors for incidents and updates the light status
-func pollIncidents(startTime time.Time, light *Light, logger *Logger) {
+func pollIncidents(startTime time.Time, light lights.Light, logger *Logger) {
 	logger.infoLog.Printf("Starting incident polling at %s", startTime.Format(time.RFC3339))
 	fmt.Printf("*** Starting incident polling at %s\n", startTime.Format(time.RFC3339))
-
-	port, err := serial.OpenPort(&serial.Config{
-		Name: serialPort,
-		Baud: baudRate,
-	})
-	if err != nil {
-		logger.errorLog.Printf("Failed to open serial port: %s", err.Error())
-		light.On(YELLOW_ON)
-		return
-	}
-	defer port.Close()
 
 	notifiedIncidents := make(map[int]bool)
 	seenIncidents := make(map[int]bool)
@@ -38,7 +27,7 @@ func pollIncidents(startTime time.Time, light *Light, logger *Logger) {
 	for {
 		if err := checkConnectivity(); err != nil {
 			logger.warnLog.Printf("Internet connectivity issue: %s", err.Error())
-			light.On(YELLOW_ON)
+			light.On(lights.StateYellow)
 			time.Sleep(pollInterval)
 			continue
 		}
@@ -116,7 +105,7 @@ func sortIncidentsByTime(incidents []Incident) []Incident {
 }
 
 // AlertLogic determines the appropriate light state based on incident status
-func AlertLogic(incidents []Incident, light *Light, notifiedIncidents map[int]bool, startTime time.Time) (LightState, error) {
+func AlertLogic(incidents []Incident, light lights.Light, notifiedIncidents map[int]bool, startTime time.Time) (lights.State, error) {
 	if len(incidents) == 0 {
 		return nil, nil
 	}
@@ -128,19 +117,19 @@ func AlertLogic(incidents []Incident, light *Light, notifiedIncidents map[int]bo
 	// First check the most recent incident
 	createdAt, err := parseIncidentTime(mostRecent)
 	if err != nil {
-		return YellowLight{}, fmt.Errorf("error parsing incident time: %s", err.Error())
+		return lights.YellowState{}, fmt.Errorf("error parsing incident time: %s", err.Error())
 	}
 
 	if createdAt.After(startTime) && isNormalState(mostRecent.CurrentState) {
 		fmt.Printf("Notification not sent for incident: %s [%s]\n", mostRecent.Incident.Title, mostRecent.CurrentState)
-		return GreenLight{}, nil
+		return lights.GreenState{}, nil
 	}
 
 	// Then check for any unnotified critical incidents
 	for _, incident := range sortedIncidents {
 		createdAt, err := parseIncidentTime(incident)
 		if err != nil {
-			return YellowLight{}, fmt.Errorf("error parsing incident time: %s", err.Error())
+			return lights.YellowState{}, fmt.Errorf("error parsing incident time: %s", err.Error())
 		}
 
 		if !createdAt.After(startTime) {
@@ -149,7 +138,7 @@ func AlertLogic(incidents []Incident, light *Light, notifiedIncidents map[int]bo
 
 		if !notifiedIncidents[incident.ID] && isRelevantState(incident.CurrentState) {
 			notifiedIncidents[incident.ID] = true
-			return RedLight{}, nil
+			return lights.RedState{}, nil
 		}
 	}
 

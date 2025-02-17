@@ -4,18 +4,27 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"my-incident-checker/lights"
 )
+
+// MockLight implements lights.Light interface for testing
+type MockLight struct{}
+
+func (l *MockLight) On(cmd interface{}) error    { return nil }
+func (l *MockLight) Clear() error                { return nil }
+func (l *MockLight) Blink(cmd interface{}) error { return nil }
 
 func TestAlertLogic(t *testing.T) {
 	startTime := time.Date(2025, 1, 9, 3, 17, 41, 0, time.UTC)
-	light := &Light{}
+	light := &MockLight{}
 
 	tests := []struct {
 		name              string
 		incidents         []Incident
 		notifiedIncidents map[int]bool
 		startTime         time.Time
-		wantState         LightState
+		wantState         lights.State
 		wantErr           bool
 	}{
 		{
@@ -34,7 +43,7 @@ func TestAlertLogic(t *testing.T) {
 			},
 			notifiedIncidents: map[int]bool{},
 			startTime:         startTime,
-			wantState:         RedLight{},
+			wantState:         lights.RedState{},
 			wantErr:           false,
 		},
 		{
@@ -91,7 +100,7 @@ func TestAlertLogic(t *testing.T) {
 			},
 			notifiedIncidents: map[int]bool{},
 			startTime:         startTime,
-			wantState:         GreenLight{},
+			wantState:         lights.GreenState{},
 			wantErr:           false,
 		},
 		{
@@ -110,7 +119,7 @@ func TestAlertLogic(t *testing.T) {
 			},
 			notifiedIncidents: map[int]bool{},
 			startTime:         startTime,
-			wantState:         GreenLight{},
+			wantState:         lights.GreenState{},
 			wantErr:           false,
 		},
 		{
@@ -139,7 +148,7 @@ func TestAlertLogic(t *testing.T) {
 			},
 			notifiedIncidents: map[int]bool{},
 			startTime:         startTime,
-			wantState:         RedLight{},
+			wantState:         lights.RedState{},
 			wantErr:           false,
 		},
 		{
@@ -168,7 +177,7 @@ func TestAlertLogic(t *testing.T) {
 			},
 			notifiedIncidents: map[int]bool{},
 			startTime:         startTime,
-			wantState:         GreenLight{},
+			wantState:         lights.GreenState{},
 			wantErr:           false,
 		},
 		{
@@ -187,7 +196,7 @@ func TestAlertLogic(t *testing.T) {
 			},
 			notifiedIncidents: map[int]bool{},
 			startTime:         startTime,
-			wantState:         YellowLight{},
+			wantState:         lights.YellowState{},
 			wantErr:           true,
 		},
 	}
@@ -214,18 +223,5 @@ func TestAlertLogic(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func getStateName(state LightState) string {
-	switch state.(type) {
-	case RedLight:
-		return "RedLight"
-	case GreenLight:
-		return "GreenLight"
-	case YellowLight:
-		return "YellowLight"
-	default:
-		return "Unknown"
 	}
 }
