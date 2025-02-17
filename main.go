@@ -1,35 +1,22 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
-	"github.com/tarm/serial"
+	"my-incident-checker/heartbeat"
+	"my-incident-checker/lights"
+	"my-incident-checker/network"
+	"my-incident-checker/node"
+	"my-incident-checker/notify"
+	"my-incident-checker/poll"
+	"my-incident-checker/types"
 )
 
-// Log levels
-const (
-	LogDebug = "DEBUG"
-	LogInfo  = "INFO"
-	LogWarn  = "WARN"
-	LogError = "ERROR"
-)
-
-type Logger struct {
-	debugLog *log.Logger
-	infoLog  *log.Logger
-	warnLog  *log.Logger
-	errorLog *log.Logger
-}
-
-func NewLogger() (*Logger, error) {
+func NewLogger() (*types.Logger, error) {
 	// Create logs directory if it doesn't exist
 	logDir := "logs"
 	if err := os.MkdirAll(logDir, 0755); err != nil {
@@ -47,386 +34,12 @@ func NewLogger() (*Logger, error) {
 	// Create multi-writer for both file and stdout
 	flags := log.LstdFlags | log.Lmicroseconds | log.LUTC
 
-	return &Logger{
-		debugLog: log.New(file, "DEBUG: ", flags),
-		infoLog:  log.New(file, "INFO:  ", flags),
-		warnLog:  log.New(file, "WARN:  ", flags),
-		errorLog: log.New(file, "ERROR: ", flags),
+	return &types.Logger{
+		DebugLog: log.New(file, "DEBUG: ", flags),
+		InfoLog:  log.New(file, "INFO:  ", flags),
+		WarnLog:  log.New(file, "WARN:  ", flags),
+		ErrorLog: log.New(file, "ERROR: ", flags),
 	}, nil
-}
-
-const (
-	notificationEndpoint = "https://ntfy.sh/dapidi_alerts"
-	incidentsEndpoint    = "https://status-api.joseserver.com/incidents/recent?count=10"
-	connectivityCheck    = "https://www.google.com"
-	heartbeatEndpoint    = "https://nosnch.in/2b7bdbea9e"
-	pollInterval         = 5 * time.Second
-	heartbeatInterval    = 5 * time.Minute
-	timeFormat           = "2006-01-02T15:04:05.999999"
-	connectTimeout       = 10 * time.Second
-
-	serialPort = "/dev/ttyUSB0" // Change to the serial/COM port of the tower light
-	baudRate   = 9600
-
-	stateOperational = "operational"
-	stateMaintenance = "maintenance"
-	stateCritical    = "critical"
-	stateOutage      = "outage"
-	stateDegraded    = "degraded"
-
-	// Command bytes for LEDs and buzzer
-	RED_ON    byte = 0x11
-	RED_OFF   byte = 0x21
-	RED_BLINK byte = 0x41
-
-	YELLOW_ON    byte = 0x12
-	YELLOW_OFF   byte = 0x22
-	YELLOW_BLINK byte = 0x42
-
-	GREEN_ON    byte = 0x14
-	GREEN_OFF   byte = 0x24
-	GREEN_BLINK byte = 0x44
-
-	BUZZER_ON    byte = 0x18
-	BUZZER_OFF   byte = 0x28
-	BUZZER_BLINK byte = 0x48
-)
-
-type IncidentDetails struct {
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Components  []string `json:"components"`
-	URL         string   `json:"url"`
-}
-
-type IncidentHistory struct {
-	ID           int             `json:"id"`
-	IncidentID   int             `json:"incident_id"`
-	RecordedAt   string          `json:"recorded_at"`
-	Service      string          `json:"service"`
-	PrevState    string          `json:"previous_state"`
-	CurrentState string          `json:"current_state"`
-	Incident     IncidentDetails `json:"incident"`
-}
-
-type Incident struct {
-	ID           int               `json:"id"`
-	Service      string            `json:"service"`
-	PrevState    string            `json:"previous_state"`
-	CurrentState string            `json:"current_state"`
-	CreatedAt    string            `json:"created_at"`
-	Incident     IncidentDetails   `json:"incident"`
-	History      []IncidentHistory `json:"history"`
-}
-
-type Light struct{}
-
-type LightState interface {
-	Apply(light *Light) error
-}
-
-type RedLight struct{}
-type GreenLight struct{}
-type YellowLight struct{}
-
-func (s RedLight) Apply(light *Light) error {
-	return light.On(RED_ON)
-}
-
-func (s GreenLight) Apply(light *Light) error {
-	return light.On(GREEN_ON)
-}
-
-func (s YellowLight) Apply(light *Light) error {
-	return light.On(YELLOW_ON)
-}
-
-func (l *Light) On(onCmd byte) error {
-	l.Clear()
-
-	// Configure serial port settings
-	c := &serial.Config{
-		Name: serialPort,
-		Baud: baudRate,
-	}
-
-	// Open the serial port
-	s, err := serial.OpenPort(c)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := s.Close(); err != nil {
-			log.Printf("Error closing serial port: %v", err)
-		}
-	}()
-
-	if err := sendCommand(s, onCmd); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (l *Light) Clear() error {
-	// Configure serial port settings
-	c := &serial.Config{
-		Name: serialPort,
-		Baud: baudRate,
-	}
-
-	// Open the serial port
-	s, err := serial.OpenPort(c)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := s.Close(); err != nil {
-			log.Printf("Error closing serial port: %s", err.Error())
-		}
-	}()
-
-	// Clean up any old state by turning off all LEDs and buzzer
-	initialCommands := []byte{
-		BUZZER_OFF,
-		RED_OFF,
-		YELLOW_OFF,
-		GREEN_OFF,
-	}
-
-	for _, cmd := range initialCommands {
-		if err := sendCommand(s, cmd); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func checkConnectivity() error {
-	client := &http.Client{
-		Timeout: connectTimeout,
-	}
-
-	resp, err := client.Get(connectivityCheck)
-	if err != nil {
-		return fmt.Errorf("connectivity check failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("connectivity check failed with status code: %d", resp.StatusCode)
-	}
-
-	return nil
-}
-
-func getNodeName() string {
-	nodeName := os.Getenv("NODE_NAME")
-	if nodeName == "" {
-		nodeName = os.Getenv("HOSTNAME")
-	}
-	if nodeName == "" {
-		nodeName = "unknown"
-	}
-	return nodeName
-}
-
-func notify(message string) error {
-	if message == "" {
-		return fmt.Errorf("message cannot be empty")
-	}
-	payload := strings.NewReader(message)
-	resp, err := http.Post(notificationEndpoint, "text/plain", payload)
-	if err != nil {
-		return fmt.Errorf("failed to send notification: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	return nil
-}
-
-func fetchIncidents() ([]Incident, error) {
-	resp, err := http.Get(incidentsEndpoint)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch incidents: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code from incidents API: %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	var incidents []Incident
-	if err := json.Unmarshal(body, &incidents); err != nil {
-		return nil, fmt.Errorf("failed to parse incidents: %w", err)
-	}
-
-	return incidents, nil
-}
-
-func isRelevantState(state string) bool {
-	return state == stateCritical || state == stateOutage || state == stateDegraded
-}
-
-func sendCommand(port *serial.Port, cmd byte) error {
-	_, err := port.Write([]byte{cmd})
-	return err
-}
-
-func pollIncidents(startTime time.Time, light *Light, logger *Logger) {
-	logger.infoLog.Printf("Starting incident polling at %s", startTime.Format(time.RFC3339))
-
-	port, err := serial.OpenPort(&serial.Config{
-		Name: serialPort,
-		Baud: baudRate,
-	})
-	if err != nil {
-		logger.errorLog.Printf("Failed to open serial port: %s", err.Error())
-		light.On(YELLOW_ON)
-		return
-	}
-	defer port.Close()
-
-	notifiedIncidents := make(map[int]bool)
-	seenIncidents := make(map[int]bool)
-
-	for {
-		if err := checkConnectivity(); err != nil {
-			logger.warnLog.Printf("Internet connectivity issue: %s", err.Error())
-			light.On(YELLOW_ON)
-			time.Sleep(pollInterval)
-			continue
-		}
-
-		incidents, err := fetchIncidents()
-		if err != nil {
-			logger.errorLog.Printf("Failed to fetch incidents: %s", err.Error())
-			time.Sleep(pollInterval)
-			continue
-		}
-
-		logger.debugLog.Printf("Fetched %d incidents", len(incidents))
-
-		for _, incident := range incidents {
-			if !seenIncidents[incident.ID] {
-				logger.infoLog.Printf("New incident detected: [%s] %s - Current State: %s",
-					incident.Service,
-					incident.Incident.Title,
-					incident.CurrentState)
-				seenIncidents[incident.ID] = true
-			}
-		}
-
-		// Log state changes
-		state, err := AlertLogic(incidents, light, notifiedIncidents, startTime)
-		if err != nil {
-			logger.errorLog.Printf("Alert logic error: %s", err.Error())
-		} else if state != nil {
-			logger.infoLog.Printf("Light state changed to: %T", state)
-		}
-
-		time.Sleep(pollInterval)
-	}
-}
-
-func sortIncidentsByTime(incidents []Incident) []Incident {
-	sorted := make([]Incident, len(incidents))
-	copy(sorted, incidents)
-
-	for i := 0; i < len(sorted)-1; i++ {
-		for j := i + 1; j < len(sorted); j++ {
-			if sorted[i].CreatedAt < sorted[j].CreatedAt {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
-			}
-		}
-	}
-
-	return sorted
-}
-
-func AlertLogic(incidents []Incident, light *Light, notifiedIncidents map[int]bool, startTime time.Time) (LightState, error) {
-	if len(incidents) == 0 {
-		return nil, nil
-	}
-
-	// Sort incidents by creation time, most recent first
-	sortedIncidents := sortIncidentsByTime(incidents)
-	mostRecent := sortedIncidents[0]
-
-	// First check the most recent incident
-	createdAt, err := parseIncidentTime(mostRecent)
-	if err != nil {
-		return YellowLight{}, fmt.Errorf("error parsing incident time: %s", err.Error())
-	}
-
-	if createdAt.After(startTime) && isNormalState(mostRecent.CurrentState) {
-		fmt.Printf("Notification not sent for incident: %s [%s]\n", mostRecent.Incident.Title, mostRecent.CurrentState)
-		return GreenLight{}, nil
-	}
-
-	// Then check for any unnotified critical incidents
-	for _, incident := range sortedIncidents {
-		createdAt, err := parseIncidentTime(incident)
-		if err != nil {
-			return YellowLight{}, fmt.Errorf("error parsing incident time: %s", err.Error())
-		}
-
-		if !createdAt.After(startTime) {
-			continue
-		}
-
-		if !notifiedIncidents[incident.ID] && isRelevantState(incident.CurrentState) {
-			notifiedIncidents[incident.ID] = true
-			return RedLight{}, nil
-		}
-	}
-
-	return nil, nil
-}
-
-func parseIncidentTime(incident Incident) (time.Time, error) {
-	return time.Parse(timeFormat, strings.Split(incident.CreatedAt, ".")[0])
-}
-
-func isNormalState(state string) bool {
-	return state == stateOperational || state == stateMaintenance
-}
-
-func sendHeartbeat() error {
-	payload := strings.NewReader("m=just checking in")
-	resp, err := http.Post(heartbeatEndpoint, "application/x-www-form-urlencoded", payload)
-	if err != nil {
-		return fmt.Errorf("failed to send heartbeat:: %s", err.Error())
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return fmt.Errorf("heartbeat failed with status code: %d", resp.StatusCode)
-	}
-
-	return nil
-}
-
-func runHeartbeat() {
-	ticker := time.NewTicker(heartbeatInterval)
-	defer ticker.Stop()
-
-	for {
-		if err := sendHeartbeat(); err != nil {
-			log.Printf("Heartbeat error: %s", err.Error())
-		} else {
-			log.Printf("Heartbeat sent successfully")
-		}
-		<-ticker.C
-	}
 }
 
 func main() {
@@ -435,42 +48,74 @@ func main() {
 		log.Fatalf("Failed to initialize logger: %s", err.Error())
 	}
 
-	logger.infoLog.Printf("Starting Incident Checker")
+	// Add deferred exit log message
+	defer logger.InfoLog.Printf("Program shutting down")
+
+	logger.InfoLog.Printf("Starting Incident Checker")
 
 	// Check initial connectivity
-	if err := checkConnectivity(); err != nil {
-		logger.warnLog.Printf("Initial connectivity check failed: %s", err.Error())
-		logger.infoLog.Printf("Will continue and retry during polling...")
+	if err := network.CheckConnectivity(); err != nil {
+		logger.WarnLog.Printf("Initial connectivity check failed: %s", err.Error())
+		logger.InfoLog.Printf("Will continue and retry during polling...")
 	} else {
-		logger.infoLog.Printf("Internet connectivity confirmed")
+		logger.InfoLog.Printf("Internet connectivity confirmed")
 	}
 
-	nodeName := getNodeName()
+	nodeName := node.GetNodeName()
 	startupMessage := fmt.Sprintf("%s is online", nodeName)
 
-	if err := notify(startupMessage); err != nil {
+	if err := notify.Send(startupMessage); err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("Startup notification sent successfully")
 
-	light := Light{}
+	// Initialize the light with automatic detection
+	light, cleanup, err := initializeLight(logger)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cleanup()
+
 	light.Clear()
+
 	fmt.Println("Yellow light on for 2 seconds")
-	light.On(YELLOW_BLINK)
+	light.Blink(lights.StateYellow)
 	time.Sleep(2 * time.Second)
+
 	fmt.Println("Red light on for 2 seconds")
-	light.On(RED_BLINK)
+	light.Blink(lights.StateRed)
 	time.Sleep(2 * time.Second)
+
 	fmt.Println("Green light on for 2 seconds")
-	light.On(GREEN_BLINK)
+	light.Blink(lights.StateGreen)
 	time.Sleep(2 * time.Second)
+
 	light.Clear()
 	fmt.Println("Lights cleared")
-	light.On(GREEN_ON)
+	light.On(lights.StateGreen)
 
 	// Start heartbeat in a goroutine
-	go runHeartbeat()
+	fmt.Println("Starting heartbeat")
+	logger.InfoLog.Printf("Starting heartbeat...")
+	go heartbeat.Run()
 
+	fmt.Println("Polling for incidents")
 	startTime := time.Now()
-	pollIncidents(startTime, &light, logger)
+	poll.PollIncidents(startTime, light, logger)
+	fmt.Println("Stopped polling for incidents")
+}
+
+func initializeLight(logger *types.Logger) (lights.Light, func(), error) {
+	// Try to initialize BLINK1MK3 first
+	if blink1Light, err := lights.NewBlink1Light(); err == nil {
+		logger.InfoLog.Printf("Using BLINK1MK3 light")
+		return blink1Light, func() {
+			blink1Light.Close()
+		}, nil
+	}
+
+	// Fall back to SerialLight
+	logger.InfoLog.Printf("BLINK1MK3 not found, using SerialLight")
+	serialLight := lights.NewSerialLight("/dev/ttyUSB0", 9600)
+	return serialLight, func() {}, nil
 }
