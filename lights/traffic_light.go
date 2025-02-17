@@ -7,21 +7,21 @@ import (
 	"github.com/tarm/serial"
 )
 
-// SerialLight implements Light interface for serial-based tower lights
-type SerialLight struct {
+// TrafficLight implements Light interface for serial-based tower lights
+type TrafficLight struct {
 	port     string
 	baudRate int
 }
 
-// NewSerialLight creates a new SerialLight instance
-func NewSerialLight(port string, baudRate int) *SerialLight {
-	return &SerialLight{
+// NewTrafficLight creates a new TrafficLight instance
+func NewTrafficLight(port string, baudRate int) *TrafficLight {
+	return &TrafficLight{
 		port:     port,
 		baudRate: baudRate,
 	}
 }
 
-func (l *SerialLight) openPort() (*serial.Port, error) {
+func (l *TrafficLight) openPort() (*serial.Port, error) {
 	c := &serial.Config{
 		Name: l.port,
 		Baud: l.baudRate,
@@ -29,10 +29,10 @@ func (l *SerialLight) openPort() (*serial.Port, error) {
 	return serial.OpenPort(c)
 }
 
-func (l *SerialLight) On(cmd interface{}) error {
+func (l *TrafficLight) On(cmd interface{}) error {
 	state, ok := cmd.(StandardState)
 	if !ok {
-		return fmt.Errorf("invalid command type for SerialLight")
+		return fmt.Errorf("invalid command type for TrafficLight")
 	}
 
 	var cmdByte byte
@@ -62,10 +62,10 @@ func (l *SerialLight) On(cmd interface{}) error {
 	return sendCommand(s, cmdByte)
 }
 
-func (l *SerialLight) Blink(cmd interface{}) error {
+func (l *TrafficLight) Blink(cmd interface{}) error {
 	state, ok := cmd.(StandardState)
 	if !ok {
-		return fmt.Errorf("invalid command type for SerialLight")
+		return fmt.Errorf("invalid command type for TrafficLight")
 	}
 
 	var cmdByte byte
@@ -93,7 +93,7 @@ func (l *SerialLight) Blink(cmd interface{}) error {
 	return sendCommand(s, cmdByte)
 }
 
-func (l *SerialLight) Clear() error {
+func (l *TrafficLight) Clear() error {
 	s, err := l.openPort()
 	if err != nil {
 		return err

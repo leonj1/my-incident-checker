@@ -116,7 +116,7 @@ func main() {
 	fmt.Println("Startup notification sent successfully")
 
 	// Initialize the light
-	light := lights.NewSerialLight("/dev/ttyUSB0", 9600)
+	light := lights.NewTrafficLight("/dev/ttyUSB0", 9600)
 	light.Clear()
 
 	fmt.Println("Yellow light on for 2 seconds")
