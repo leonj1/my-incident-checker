@@ -77,7 +77,8 @@ func fetchIncidents() ([]types.Incident, error) {
 		return nil, fmt.Errorf("unexpected status code from incidents API: %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	const maxResponseSize = 1 << 20 // 1 MB
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
