@@ -36,10 +36,11 @@ func (l *TrafficLight) On(cmd interface{}) error {
 	}
 
 	// Maps the StandardState to corresponding command bytes for the traffic light.
-	// Each state (Red, Yellow, Green) has a specific command byte defined in commands.go:
+	// Command bytes are defined in commands.go with the following values:
 	// - cmdRedOn (0x11): Turns on the red light
 	// - cmdYellowOn (0x12): Turns on the yellow light
 	// - cmdGreenOn (0x14): Turns on the green light
+	// These command bytes are specific to the hardware protocol used by the traffic light.
 	var cmdByte byte
 	switch state {
 	case StateRed:
