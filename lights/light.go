@@ -45,3 +45,24 @@ type GreenState struct{}
 func (s GreenState) Apply(light Light) error {
 	return light.On(StateGreen)
 }
+
+// BlinkingRedState implements State for blinking red light
+type BlinkingRedState struct{}
+
+func (s BlinkingRedState) Apply(light Light) error {
+	return light.Blink(StateRed)
+}
+
+// BlinkingYellowState implements State for blinking yellow light
+type BlinkingYellowState struct{}
+
+func (s BlinkingYellowState) Apply(light Light) error {
+	return light.Blink(StateYellow)
+}
+
+// BlinkingGreenState implements State for blinking green light
+type BlinkingGreenState struct{}
+
+func (s BlinkingGreenState) Apply(light Light) error {
+	return light.Blink(StateGreen)
+}
