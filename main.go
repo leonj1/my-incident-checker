@@ -108,6 +108,7 @@ func main() {
 func initializeLight(logger *types.Logger) (lights.Light, func(), error) {
 	// Try to initialize BLINK1MK3 first
 	if blink1Light, err := lights.NewBlink1Light(); err == nil {
+		fmt.Println("Using BLINK1MK3 light")
 		logger.InfoLog.Printf("Using BLINK1MK3 light")
 		return blink1Light, func() {
 			blink1Light.Close()
@@ -115,6 +116,7 @@ func initializeLight(logger *types.Logger) (lights.Light, func(), error) {
 	}
 
 	// Fall back to SerialLight
+	fmt.Println("BLINK1MK3 not found, using SerialLight")
 	logger.InfoLog.Printf("BLINK1MK3 not found, using SerialLight")
 	serialLight := lights.NewSerialLight("/dev/ttyUSB0", 9600)
 	return serialLight, func() {}, nil
