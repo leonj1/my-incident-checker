@@ -56,12 +56,11 @@ func NewLogger() (*Logger, error) {
 }
 
 const (
-	notificationEndpoint = "https://ntfy.sh/dapidi_alerts"
-	incidentsEndpoint    = "https://status-api.joseserver.com/incidents/recent?count=10"
-	heartbeatEndpoint    = "https://nosnch.in/2b7bdbea9e"
-	pollInterval         = 5 * time.Second
-	heartbeatInterval    = 5 * time.Minute
-	timeFormat           = "2006-01-02T15:04:05.999999"
+	incidentsEndpoint = "https://status-api.joseserver.com/incidents/recent?count=10"
+	heartbeatEndpoint = "https://nosnch.in/2b7bdbea9e"
+	pollInterval      = 5 * time.Second
+	heartbeatInterval = 5 * time.Minute
+	timeFormat        = "2006-01-02T15:04:05.999999"
 
 	serialPort = "/dev/ttyUSB0" // Change to the serial/COM port of the tower light
 	baudRate   = 9600
@@ -196,24 +195,6 @@ func (l *Light) Clear() error {
 			return err
 		}
 	}
-	return nil
-}
-
-func notify(message string) error {
-	if message == "" {
-		return fmt.Errorf("message cannot be empty")
-	}
-	payload := strings.NewReader(message)
-	resp, err := http.Post(notificationEndpoint, "text/plain", payload)
-	if err != nil {
-		return fmt.Errorf("failed to send notification: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
 	return nil
 }
 
