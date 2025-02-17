@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"my-incident-checker/lights"
+	"my-incident-checker/poll"
+	"my-incident-checker/types"
 )
 
 // MockLight implements lights.Light interface for testing
@@ -21,7 +23,7 @@ func TestAlertLogic(t *testing.T) {
 
 	tests := []struct {
 		name              string
-		incidents         []Incident
+		incidents         []types.Incident
 		notifiedIncidents map[int]bool
 		startTime         time.Time
 		wantState         lights.State
@@ -29,13 +31,13 @@ func TestAlertLogic(t *testing.T) {
 	}{
 		{
 			name: "new critical incident",
-			incidents: []Incident{
+			incidents: []types.Incident{
 				{
 					ID:           1,
 					Service:      "api",
 					CurrentState: "critical",
 					CreatedAt:    "2025-01-09T03:18:00",
-					Incident: IncidentDetails{
+					Incident: types.IncidentDetails{
 						Title:       "API Down",
 						Description: "API is not responding",
 					},
@@ -48,13 +50,13 @@ func TestAlertLogic(t *testing.T) {
 		},
 		{
 			name: "already notified incident",
-			incidents: []Incident{
+			incidents: []types.Incident{
 				{
 					ID:           1,
 					Service:      "api",
 					CurrentState: "critical",
 					CreatedAt:    "2025-01-09T03:18:00",
-					Incident: IncidentDetails{
+					Incident: types.IncidentDetails{
 						Title:       "API Down",
 						Description: "API is not responding",
 					},
@@ -67,13 +69,13 @@ func TestAlertLogic(t *testing.T) {
 		},
 		{
 			name: "old incident",
-			incidents: []Incident{
+			incidents: []types.Incident{
 				{
 					ID:           1,
 					Service:      "api",
 					CurrentState: "critical",
 					CreatedAt:    "2025-01-09T03:16:00",
-					Incident: IncidentDetails{
+					Incident: types.IncidentDetails{
 						Title:       "API Down",
 						Description: "API is not responding",
 					},
@@ -86,13 +88,13 @@ func TestAlertLogic(t *testing.T) {
 		},
 		{
 			name: "operational state",
-			incidents: []Incident{
+			incidents: []types.Incident{
 				{
 					ID:           1,
 					Service:      "api",
 					CurrentState: "operational",
 					CreatedAt:    "2025-01-09T03:18:00",
-					Incident: IncidentDetails{
+					Incident: types.IncidentDetails{
 						Title:       "API Recovered",
 						Description: "API is back online",
 					},
@@ -105,13 +107,13 @@ func TestAlertLogic(t *testing.T) {
 		},
 		{
 			name: "maintenance state",
-			incidents: []Incident{
+			incidents: []types.Incident{
 				{
 					ID:           1,
 					Service:      "api",
 					CurrentState: "maintenance",
 					CreatedAt:    "2025-01-09T03:18:00",
-					Incident: IncidentDetails{
+					Incident: types.IncidentDetails{
 						Title:       "API Maintenance",
 						Description: "Scheduled maintenance",
 					},
@@ -124,13 +126,13 @@ func TestAlertLogic(t *testing.T) {
 		},
 		{
 			name: "multiple incidents - most recent critical",
-			incidents: []Incident{
+			incidents: []types.Incident{
 				{
 					ID:           1,
 					Service:      "api",
 					CurrentState: "operational",
 					CreatedAt:    "2025-01-09T03:18:00",
-					Incident: IncidentDetails{
+					Incident: types.IncidentDetails{
 						Title:       "API Recovered",
 						Description: "API is back online",
 					},
@@ -140,7 +142,7 @@ func TestAlertLogic(t *testing.T) {
 					Service:      "database",
 					CurrentState: "critical",
 					CreatedAt:    "2025-01-09T03:19:00",
-					Incident: IncidentDetails{
+					Incident: types.IncidentDetails{
 						Title:       "Database Down",
 						Description: "Database not responding",
 					},
@@ -153,13 +155,13 @@ func TestAlertLogic(t *testing.T) {
 		},
 		{
 			name: "multiple incidents - most recent operational",
-			incidents: []Incident{
+			incidents: []types.Incident{
 				{
 					ID:           1,
 					Service:      "database",
 					CurrentState: "critical",
 					CreatedAt:    "2025-01-09T03:18:00",
-					Incident: IncidentDetails{
+					Incident: types.IncidentDetails{
 						Title:       "Database Down",
 						Description: "Database not responding",
 					},
@@ -169,7 +171,7 @@ func TestAlertLogic(t *testing.T) {
 					Service:      "api",
 					CurrentState: "operational",
 					CreatedAt:    "2025-01-09T03:19:00",
-					Incident: IncidentDetails{
+					Incident: types.IncidentDetails{
 						Title:       "API Recovered",
 						Description: "API is back online",
 					},
@@ -182,13 +184,13 @@ func TestAlertLogic(t *testing.T) {
 		},
 		{
 			name: "invalid time format",
-			incidents: []Incident{
+			incidents: []types.Incident{
 				{
 					ID:           1,
 					Service:      "api",
 					CurrentState: "critical",
 					CreatedAt:    "invalid-time",
-					Incident: IncidentDetails{
+					Incident: types.IncidentDetails{
 						Title:       "API Down",
 						Description: "API is not responding",
 					},
@@ -203,7 +205,7 @@ func TestAlertLogic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotState, err := AlertLogic(tt.incidents, light, tt.notifiedIncidents, tt.startTime)
+			gotState, err := poll.AlertLogic(tt.incidents, light, tt.notifiedIncidents, tt.startTime)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("AlertLogic() error = %v, wantErr %v", err, tt.wantErr)

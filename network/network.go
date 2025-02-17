@@ -1,4 +1,4 @@
-package main
+package network
 
 import (
 	"fmt"
@@ -11,8 +11,8 @@ const (
 	connectTimeout    = 10 * time.Second
 )
 
-// checkConnectivity verifies internet connectivity by making a request to a known endpoint
-func checkConnectivity() error {
+// CheckConnectivity verifies internet connectivity by making a request to a known endpoint
+func CheckConnectivity() error {
 	client := &http.Client{
 		Timeout: connectTimeout,
 	}

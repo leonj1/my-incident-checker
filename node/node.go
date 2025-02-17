@@ -1,9 +1,9 @@
-package main
+package node
 
 import "os"
 
-// getNodeName retrieves the node name from environment variables
-func getNodeName() string {
+// GetNodeName retrieves the node name from environment variables
+func GetNodeName() string {
 	nodeName := os.Getenv("NODE_NAME")
 	if nodeName == "" {
 		nodeName = os.Getenv("HOSTNAME")

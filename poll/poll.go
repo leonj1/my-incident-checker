@@ -1,4 +1,4 @@
-package main
+package poll
 
 import (
 	"encoding/json"
@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"my-incident-checker/lights"
+	"my-incident-checker/network"
+	"my-incident-checker/types"
 )
 
 const (
@@ -16,17 +18,17 @@ const (
 	pollInterval      = 5 * time.Second
 )
 
-// pollIncidents continuously monitors for incidents and updates the light status
-func pollIncidents(startTime time.Time, light lights.Light, logger *Logger) {
-	logger.infoLog.Printf("Starting incident polling at %s", startTime.Format(time.RFC3339))
+// PollIncidents continuously monitors for incidents and updates the light status
+func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger) {
+	logger.InfoLog.Printf("Starting incident polling at %s", startTime.Format(time.RFC3339))
 	fmt.Printf("*** Starting incident polling at %s\n", startTime.Format(time.RFC3339))
 
 	notifiedIncidents := make(map[int]bool)
 	seenIncidents := make(map[int]bool)
 
 	for {
-		if err := checkConnectivity(); err != nil {
-			logger.warnLog.Printf("Internet connectivity issue: %s", err.Error())
+		if err := network.CheckConnectivity(); err != nil {
+			logger.WarnLog.Printf("Internet connectivity issue: %s", err.Error())
 			light.On(lights.StateYellow)
 			time.Sleep(pollInterval)
 			continue
@@ -34,16 +36,16 @@ func pollIncidents(startTime time.Time, light lights.Light, logger *Logger) {
 
 		incidents, err := fetchIncidents()
 		if err != nil {
-			logger.errorLog.Printf("Failed to fetch incidents: %s", err.Error())
+			logger.ErrorLog.Printf("Failed to fetch incidents: %s", err.Error())
 			time.Sleep(pollInterval)
 			continue
 		}
 
-		logger.debugLog.Printf("Fetched %d incidents", len(incidents))
+		logger.DebugLog.Printf("Fetched %d incidents", len(incidents))
 
 		for _, incident := range incidents {
 			if !seenIncidents[incident.ID] {
-				logger.infoLog.Printf("New incident detected: [%s] %s - Current State: %s",
+				logger.InfoLog.Printf("New incident detected: [%s] %s - Current State: %s",
 					incident.Service,
 					incident.Incident.Title,
 					incident.CurrentState)
@@ -54,9 +56,9 @@ func pollIncidents(startTime time.Time, light lights.Light, logger *Logger) {
 		// Log state changes
 		state, err := AlertLogic(incidents, light, notifiedIncidents, startTime)
 		if err != nil {
-			logger.errorLog.Printf("Alert logic error: %s", err.Error())
+			logger.ErrorLog.Printf("Alert logic error: %s", err.Error())
 		} else if state != nil {
-			logger.infoLog.Printf("Light state changed to: %T", state)
+			logger.InfoLog.Printf("Light state changed to: %T", state)
 		}
 
 		time.Sleep(pollInterval)
@@ -64,7 +66,7 @@ func pollIncidents(startTime time.Time, light lights.Light, logger *Logger) {
 }
 
 // fetchIncidents retrieves the list of incidents from the API
-func fetchIncidents() ([]Incident, error) {
+func fetchIncidents() ([]types.Incident, error) {
 	resp, err := http.Get(incidentsEndpoint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch incidents: %w", err)
@@ -80,7 +82,7 @@ func fetchIncidents() ([]Incident, error) {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	var incidents []Incident
+	var incidents []types.Incident
 	if err := json.Unmarshal(body, &incidents); err != nil {
 		return nil, fmt.Errorf("failed to parse incidents: %w", err)
 	}
@@ -89,8 +91,8 @@ func fetchIncidents() ([]Incident, error) {
 }
 
 // sortIncidentsByTime sorts incidents by creation time, most recent first
-func sortIncidentsByTime(incidents []Incident) []Incident {
-	sorted := make([]Incident, len(incidents))
+func sortIncidentsByTime(incidents []types.Incident) []types.Incident {
+	sorted := make([]types.Incident, len(incidents))
 	copy(sorted, incidents)
 
 	for i := 0; i < len(sorted)-1; i++ {
@@ -105,7 +107,7 @@ func sortIncidentsByTime(incidents []Incident) []Incident {
 }
 
 // AlertLogic determines the appropriate light state based on incident status
-func AlertLogic(incidents []Incident, light lights.Light, notifiedIncidents map[int]bool, startTime time.Time) (lights.State, error) {
+func AlertLogic(incidents []types.Incident, light lights.Light, notifiedIncidents map[int]bool, startTime time.Time) (lights.State, error) {
 	if len(incidents) == 0 {
 		return nil, nil
 	}
@@ -146,16 +148,16 @@ func AlertLogic(incidents []Incident, light lights.Light, notifiedIncidents map[
 }
 
 // parseIncidentTime parses the incident creation time
-func parseIncidentTime(incident Incident) (time.Time, error) {
-	return time.Parse(timeFormat, strings.Split(incident.CreatedAt, ".")[0])
+func parseIncidentTime(incident types.Incident) (time.Time, error) {
+	return time.Parse(types.TimeFormat, strings.Split(incident.CreatedAt, ".")[0])
 }
 
 // isNormalState checks if the state is operational or maintenance
 func isNormalState(state string) bool {
-	return state == stateOperational || state == stateMaintenance
+	return state == types.StateOperational || state == types.StateMaintenance
 }
 
 // isRelevantState checks if the state is critical, outage, or degraded
 func isRelevantState(state string) bool {
-	return state == stateCritical || state == stateOutage || state == stateDegraded
+	return state == types.StateCritical || state == types.StateOutage || state == types.StateDegraded
 }

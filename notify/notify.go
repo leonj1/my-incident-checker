@@ -1,4 +1,4 @@
-package main
+package notify
 
 import (
 	"fmt"
@@ -10,8 +10,8 @@ const (
 	notificationEndpoint = "https://ntfy.sh/dapidi_alerts"
 )
 
-// notify sends a notification message to the configured endpoint
-func notify(message string) error {
+// Send sends a notification message to the configured endpoint
+func Send(message string) error {
 	if message == "" {
 		return fmt.Errorf("message cannot be empty")
 	}

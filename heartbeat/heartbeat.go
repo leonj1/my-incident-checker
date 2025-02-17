@@ -1,4 +1,4 @@
-package main
+package heartbeat
 
 import (
 	"fmt"
@@ -29,8 +29,8 @@ func sendHeartbeat() error {
 	return nil
 }
 
-// runHeartbeat continuously sends heartbeat signals at regular intervals
-func runHeartbeat() {
+// Run continuously sends heartbeat signals at regular intervals
+func Run() {
 	fmt.Printf("In runHeartbeat\n")
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()

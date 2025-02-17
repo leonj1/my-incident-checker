@@ -7,25 +7,16 @@ import (
 	"path/filepath"
 	"time"
 
+	"my-incident-checker/heartbeat"
 	"my-incident-checker/lights"
+	"my-incident-checker/network"
+	"my-incident-checker/node"
+	"my-incident-checker/notify"
+	"my-incident-checker/poll"
+	"my-incident-checker/types"
 )
 
-// Log levels
-const (
-	LogDebug = "DEBUG"
-	LogInfo  = "INFO"
-	LogWarn  = "WARN"
-	LogError = "ERROR"
-)
-
-type Logger struct {
-	debugLog *log.Logger
-	infoLog  *log.Logger
-	warnLog  *log.Logger
-	errorLog *log.Logger
-}
-
-func NewLogger() (*Logger, error) {
+func NewLogger() (*types.Logger, error) {
 	// Create logs directory if it doesn't exist
 	logDir := "logs"
 	if err := os.MkdirAll(logDir, 0755); err != nil {
@@ -43,49 +34,12 @@ func NewLogger() (*Logger, error) {
 	// Create multi-writer for both file and stdout
 	flags := log.LstdFlags | log.Lmicroseconds | log.LUTC
 
-	return &Logger{
-		debugLog: log.New(file, "DEBUG: ", flags),
-		infoLog:  log.New(file, "INFO:  ", flags),
-		warnLog:  log.New(file, "WARN:  ", flags),
-		errorLog: log.New(file, "ERROR: ", flags),
+	return &types.Logger{
+		DebugLog: log.New(file, "DEBUG: ", flags),
+		InfoLog:  log.New(file, "INFO:  ", flags),
+		WarnLog:  log.New(file, "WARN:  ", flags),
+		ErrorLog: log.New(file, "ERROR: ", flags),
 	}, nil
-}
-
-const (
-	timeFormat = "2006-01-02T15:04:05.999999"
-
-	stateOperational = "operational"
-	stateMaintenance = "maintenance"
-	stateCritical    = "critical"
-	stateOutage      = "outage"
-	stateDegraded    = "degraded"
-)
-
-type IncidentDetails struct {
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Components  []string `json:"components"`
-	URL         string   `json:"url"`
-}
-
-type IncidentHistory struct {
-	ID           int             `json:"id"`
-	IncidentID   int             `json:"incident_id"`
-	RecordedAt   string          `json:"recorded_at"`
-	Service      string          `json:"service"`
-	PrevState    string          `json:"previous_state"`
-	CurrentState string          `json:"current_state"`
-	Incident     IncidentDetails `json:"incident"`
-}
-
-type Incident struct {
-	ID           int               `json:"id"`
-	Service      string            `json:"service"`
-	PrevState    string            `json:"previous_state"`
-	CurrentState string            `json:"current_state"`
-	CreatedAt    string            `json:"created_at"`
-	Incident     IncidentDetails   `json:"incident"`
-	History      []IncidentHistory `json:"history"`
 }
 
 func main() {
@@ -95,28 +49,33 @@ func main() {
 	}
 
 	// Add deferred exit log message
-	defer logger.infoLog.Printf("Program shutting down")
+	defer logger.InfoLog.Printf("Program shutting down")
 
-	logger.infoLog.Printf("Starting Incident Checker")
+	logger.InfoLog.Printf("Starting Incident Checker")
 
 	// Check initial connectivity
-	if err := checkConnectivity(); err != nil {
-		logger.warnLog.Printf("Initial connectivity check failed: %s", err.Error())
-		logger.infoLog.Printf("Will continue and retry during polling...")
+	if err := network.CheckConnectivity(); err != nil {
+		logger.WarnLog.Printf("Initial connectivity check failed: %s", err.Error())
+		logger.InfoLog.Printf("Will continue and retry during polling...")
 	} else {
-		logger.infoLog.Printf("Internet connectivity confirmed")
+		logger.InfoLog.Printf("Internet connectivity confirmed")
 	}
 
-	nodeName := getNodeName()
+	nodeName := node.GetNodeName()
 	startupMessage := fmt.Sprintf("%s is online", nodeName)
 
-	if err := notify(startupMessage); err != nil {
+	if err := notify.Send(startupMessage); err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("Startup notification sent successfully")
 
-	// Initialize the light
-	light := lights.NewTrafficLight("/dev/ttyUSB0", 9600)
+	// Initialize the light with automatic detection
+	light, cleanup, err := initializeLight(logger)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cleanup()
+
 	light.Clear()
 
 	fmt.Println("Yellow light on for 2 seconds")
@@ -137,11 +96,26 @@ func main() {
 
 	// Start heartbeat in a goroutine
 	fmt.Println("Starting heartbeat")
-	logger.infoLog.Printf("Starting heartbeat...")
-	go runHeartbeat()
+	logger.InfoLog.Printf("Starting heartbeat...")
+	go heartbeat.Run()
 
 	fmt.Println("Polling for incidents")
 	startTime := time.Now()
-	pollIncidents(startTime, light, logger)
+	poll.PollIncidents(startTime, light, logger)
 	fmt.Println("Stopped polling for incidents")
+}
+
+func initializeLight(logger *types.Logger) (lights.Light, func(), error) {
+	// Try to initialize BLINK1MK3 first
+	if blink1Light, err := lights.NewBlink1Light(); err == nil {
+		logger.InfoLog.Printf("Using BLINK1MK3 light")
+		return blink1Light, func() {
+			blink1Light.Close()
+		}, nil
+	}
+
+	// Fall back to SerialLight
+	logger.InfoLog.Printf("BLINK1MK3 not found, using SerialLight")
+	serialLight := lights.NewSerialLight("/dev/ttyUSB0", 9600)
+	return serialLight, func() {}, nil
 }
