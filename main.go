@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -56,9 +54,7 @@ func NewLogger() (*Logger, error) {
 }
 
 const (
-	incidentsEndpoint = "https://status-api.joseserver.com/incidents/recent?count=10"
 	heartbeatEndpoint = "https://nosnch.in/2b7bdbea9e"
-	pollInterval      = 5 * time.Second
 	heartbeatInterval = 5 * time.Minute
 	timeFormat        = "2006-01-02T15:04:05.999999"
 
@@ -198,157 +194,9 @@ func (l *Light) Clear() error {
 	return nil
 }
 
-func fetchIncidents() ([]Incident, error) {
-	resp, err := http.Get(incidentsEndpoint)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch incidents: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code from incidents API: %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	var incidents []Incident
-	if err := json.Unmarshal(body, &incidents); err != nil {
-		return nil, fmt.Errorf("failed to parse incidents: %w", err)
-	}
-
-	return incidents, nil
-}
-
-func isRelevantState(state string) bool {
-	return state == stateCritical || state == stateOutage || state == stateDegraded
-}
-
 func sendCommand(port *serial.Port, cmd byte) error {
 	_, err := port.Write([]byte{cmd})
 	return err
-}
-
-func pollIncidents(startTime time.Time, light *Light, logger *Logger) {
-	logger.infoLog.Printf("Starting incident polling at %s", startTime.Format(time.RFC3339))
-	fmt.Printf("*** Starting incident polling at %s\n", startTime.Format(time.RFC3339))
-
-	port, err := serial.OpenPort(&serial.Config{
-		Name: serialPort,
-		Baud: baudRate,
-	})
-	if err != nil {
-		logger.errorLog.Printf("Failed to open serial port: %s", err.Error())
-		light.On(YELLOW_ON)
-		return
-	}
-	defer port.Close()
-
-	notifiedIncidents := make(map[int]bool)
-	seenIncidents := make(map[int]bool)
-
-	for {
-		if err := checkConnectivity(); err != nil {
-			logger.warnLog.Printf("Internet connectivity issue: %s", err.Error())
-			light.On(YELLOW_ON)
-			time.Sleep(pollInterval)
-			continue
-		}
-
-		incidents, err := fetchIncidents()
-		if err != nil {
-			logger.errorLog.Printf("Failed to fetch incidents: %s", err.Error())
-			time.Sleep(pollInterval)
-			continue
-		}
-
-		logger.debugLog.Printf("Fetched %d incidents", len(incidents))
-
-		for _, incident := range incidents {
-			if !seenIncidents[incident.ID] {
-				logger.infoLog.Printf("New incident detected: [%s] %s - Current State: %s",
-					incident.Service,
-					incident.Incident.Title,
-					incident.CurrentState)
-				seenIncidents[incident.ID] = true
-			}
-		}
-
-		// Log state changes
-		state, err := AlertLogic(incidents, light, notifiedIncidents, startTime)
-		if err != nil {
-			logger.errorLog.Printf("Alert logic error: %s", err.Error())
-		} else if state != nil {
-			logger.infoLog.Printf("Light state changed to: %T", state)
-		}
-
-		time.Sleep(pollInterval)
-	}
-}
-
-func sortIncidentsByTime(incidents []Incident) []Incident {
-	sorted := make([]Incident, len(incidents))
-	copy(sorted, incidents)
-
-	for i := 0; i < len(sorted)-1; i++ {
-		for j := i + 1; j < len(sorted); j++ {
-			if sorted[i].CreatedAt < sorted[j].CreatedAt {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
-			}
-		}
-	}
-
-	return sorted
-}
-
-func AlertLogic(incidents []Incident, light *Light, notifiedIncidents map[int]bool, startTime time.Time) (LightState, error) {
-	if len(incidents) == 0 {
-		return nil, nil
-	}
-
-	// Sort incidents by creation time, most recent first
-	sortedIncidents := sortIncidentsByTime(incidents)
-	mostRecent := sortedIncidents[0]
-
-	// First check the most recent incident
-	createdAt, err := parseIncidentTime(mostRecent)
-	if err != nil {
-		return YellowLight{}, fmt.Errorf("error parsing incident time: %s", err.Error())
-	}
-
-	if createdAt.After(startTime) && isNormalState(mostRecent.CurrentState) {
-		fmt.Printf("Notification not sent for incident: %s [%s]\n", mostRecent.Incident.Title, mostRecent.CurrentState)
-		return GreenLight{}, nil
-	}
-
-	// Then check for any unnotified critical incidents
-	for _, incident := range sortedIncidents {
-		createdAt, err := parseIncidentTime(incident)
-		if err != nil {
-			return YellowLight{}, fmt.Errorf("error parsing incident time: %s", err.Error())
-		}
-
-		if !createdAt.After(startTime) {
-			continue
-		}
-
-		if !notifiedIncidents[incident.ID] && isRelevantState(incident.CurrentState) {
-			notifiedIncidents[incident.ID] = true
-			return RedLight{}, nil
-		}
-	}
-
-	return nil, nil
-}
-
-func parseIncidentTime(incident Incident) (time.Time, error) {
-	return time.Parse(timeFormat, strings.Split(incident.CreatedAt, ".")[0])
-}
-
-func isNormalState(state string) bool {
-	return state == stateOperational || state == stateMaintenance
 }
 
 func sendHeartbeat() error {
