@@ -59,6 +59,9 @@ func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger
 			logger.ErrorLog.Printf("Alert logic error: %s", err.Error())
 		} else if state != nil {
 			logger.InfoLog.Printf("Light state changed to: %T", state)
+			if err := light.On(state); err != nil {
+				logger.ErrorLog.Printf("Failed to apply light state: %s", err.Error())
+			}
 		}
 
 		time.Sleep(pollInterval)
