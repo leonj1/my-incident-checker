@@ -121,18 +121,7 @@ func AlertLogic(incidents []types.Incident, light lights.Light, notifiedIncident
 	sortedIncidents := sortIncidentsByTime(incidents)
 	mostRecent := sortedIncidents[0]
 
-	// First check the most recent incident
-	createdAt, err := parseIncidentTime(mostRecent)
-	if err != nil {
-		return lights.YellowState{}, fmt.Errorf("error parsing incident time: %s", err.Error())
-	}
-
-	if createdAt.After(startTime) && isNormalState(mostRecent.CurrentState) {
-		fmt.Printf("Notification not sent for incident: %s [%s]\n", mostRecent.Incident.Title, mostRecent.CurrentState)
-		return lights.GreenState{}, nil
-	}
-
-	// Then check for any unnotified critical incidents
+	// First check for any unnotified critical incidents
 	for _, incident := range sortedIncidents {
 		createdAt, err := parseIncidentTime(incident)
 		if err != nil {
