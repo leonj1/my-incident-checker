@@ -23,3 +23,6 @@ my-incident-checker*
 # Release directory
 release/
 
+.aider*
+.python-version
+
