@@ -8,6 +8,8 @@ import (
 	"my-incident-checker/lights"
 	"my-incident-checker/poll"
 	"my-incident-checker/types"
+	"io"
+	"log"
 )
 
 // MockLight implements lights.Light interface for testing
@@ -20,6 +22,14 @@ func (l *MockLight) Blink(cmd interface{}) error { return nil }
 func TestAlertLogic(t *testing.T) {
 	startTime := time.Date(2025, 1, 9, 3, 17, 41, 0, time.UTC)
 	light := &MockLight{}
+
+	// Create test logger that writes to io.Discard
+	testLogger := &types.Logger{
+		DebugLog: log.New(io.Discard, "", 0),
+		InfoLog:  log.New(io.Discard, "", 0),
+		WarnLog:  log.New(io.Discard, "", 0),
+		ErrorLog: log.New(io.Discard, "", 0),
+	}
 
 	tests := []struct {
 		name              string
@@ -272,7 +282,7 @@ func TestAlertLogic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotState, err := poll.AlertLogic(tt.incidents, light, tt.notifiedIncidents, tt.startTime)
+			gotState, err := poll.AlertLogic(tt.incidents, light, tt.notifiedIncidents, tt.startTime, testLogger)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("AlertLogic() error = %v, wantErr %v", err, tt.wantErr)
