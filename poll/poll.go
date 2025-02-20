@@ -110,7 +110,11 @@ func sortIncidentsByTime(incidents []types.Incident) []types.Incident {
 // AlertLogic determines the appropriate light state based on incident status
 func AlertLogic(incidents []types.Incident, light lights.Light, notifiedIncidents map[int]bool, startTime time.Time) (lights.State, error) {
 	if len(incidents) == 0 {
-		return nil, nil
+		// Clear notification history and return green state when no incidents
+		for k := range notifiedIncidents {
+			delete(notifiedIncidents, k)
+		}
+		return lights.GreenState{}, nil
 	}
 
 	// Sort incidents by creation time, most recent first
