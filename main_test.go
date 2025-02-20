@@ -201,6 +201,73 @@ func TestAlertLogic(t *testing.T) {
 			wantState:         lights.YellowState{},
 			wantErr:           true,
 		},
+		{
+			name: "storage outage with web operational",
+			incidents: []types.Incident{
+				{
+					ID:           2,
+					Service:      "storage",
+					PrevState:    "maintenance",
+					CurrentState: "outage",
+					CreatedAt:    "2025-02-20T16:27:39.134631",
+					Incident: types.IncidentDetails{
+						Title:       "Storage Service Outage Detected",
+						Description: "Automated systems detected abnormal behavior in storage service api.",
+						Components:  []string{"api", "server", "database"},
+						URL:        "https://status.joseserver.com/incidents/storage-1740068859",
+					},
+					History: []types.IncidentHistory{
+						{
+							ID:           2,
+							IncidentID:   2,
+							RecordedAt:   "2025-02-20T16:27:39.168785",
+							Service:      "storage",
+							PrevState:    "maintenance",
+							CurrentState: "outage",
+							Incident: types.IncidentDetails{
+								Title:       "Storage Service Outage Detected",
+								Description: "Automated systems detected abnormal behavior in storage service api.",
+								Components:  []string{"api", "server", "database"},
+								URL:        "https://status.joseserver.com/incidents/storage-1740068859",
+							},
+						},
+					},
+				},
+				{
+					ID:           1,
+					Service:      "web",
+					PrevState:    "outage",
+					CurrentState: "operational",
+					CreatedAt:    "2025-02-20T16:27:34.010324",
+					Incident: types.IncidentDetails{
+						Title:       "Unexpected Operational in Web System",
+						Description: "We are investigating reports of operational performance in the web system.",
+						Components:  []string{"load-balancer", "server", "api"},
+						URL:        "https://status.joseserver.com/incidents/web-1740068854",
+					},
+					History: []types.IncidentHistory{
+						{
+							ID:           1,
+							IncidentID:   1,
+							RecordedAt:   "2025-02-20T16:27:34.097130",
+							Service:      "web",
+							PrevState:    "outage",
+							CurrentState: "operational",
+							Incident: types.IncidentDetails{
+								Title:       "Unexpected Operational in Web System",
+								Description: "We are investigating reports of operational performance in the web system.",
+								Components:  []string{"load-balancer", "server", "api"},
+								URL:        "https://status.joseserver.com/incidents/web-1740068854",
+							},
+						},
+					},
+				},
+			},
+			notifiedIncidents: map[int]bool{},
+			startTime:         time.Date(2025, 2, 20, 16, 27, 0, 0, time.UTC),
+			wantState:         lights.RedState{},
+			wantErr:           false,
+		},
 	}
 
 	for _, tt := range tests {
