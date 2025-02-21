@@ -119,8 +119,16 @@ func initializeLight(logger *types.Logger) (lights.Light, func(), error) {
 		// Fall back to SerialLight
 		fmt.Println("BLINK1MK3 not found, using SerialLight")
 		logger.InfoLog.Printf("BLINK1MK3 not found, using SerialLight")
-		light = lights.NewSerialLight("/dev/ttyUSB0", 9600)
-		cleanup = func() {}
+		serialLight, err := lights.NewSerialLight("/dev/ttyUSB0", 9600)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to initialize SerialLight: %w", err)
+		}
+		light = serialLight
+		cleanup = func() {
+			if err := serialLight.Close(); err != nil {
+				logger.ErrorLog.Printf("Error closing SerialLight: %s", err.Error())
+			}
+		}
 	}
 
 	// Initialize to green state
