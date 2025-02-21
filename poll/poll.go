@@ -26,6 +26,7 @@ func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger
 
 	notifiedIncidents := make(map[int]bool)
 	seenIncidents := make(map[int]bool)
+	var cachedIncidents []types.Incident
 
 	for {
 		if err := network.CheckConnectivity(); err != nil {
@@ -42,7 +43,12 @@ func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger
 			continue
 		}
 
-		logger.DebugLog.Printf("Fetched %d incidents", len(incidents))
+		// Only log if incidents have changed
+		if !incidentsEqual(incidents, cachedIncidents) {
+			logIncidentChanges(logger, cachedIncidents, incidents)
+			cachedIncidents = make([]types.Incident, len(incidents))
+			copy(cachedIncidents, incidents)
+		}
 
 		for _, incident := range incidents {
 			if !seenIncidents[incident.ID] {
@@ -59,13 +65,87 @@ func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger
 		if err != nil {
 			logger.ErrorLog.Printf("Alert logic error: %s", err.Error())
 		} else if state != nil {
-			logger.InfoLog.Printf("Light state changed to: %T", state)
+			stateColor := "unknown"
+			switch state.(type) {
+			case lights.RedState:
+				stateColor = "red"
+			case lights.YellowState:
+				stateColor = "yellow"
+			case lights.GreenState:
+				stateColor = "green"
+			}
+			logger.InfoLog.Printf("Light color changed to: %s", stateColor)
 			if err := state.Apply(light); err != nil {
 				logger.ErrorLog.Printf("Failed to apply light state: %s", err.Error())
 			}
 		}
 
 		time.Sleep(pollInterval)
+	}
+}
+
+// incidentsEqual compares two slices of incidents for equality, regardless of order
+func incidentsEqual(a, b []types.Incident) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	// Create a map to track incidents by their unique properties
+	incidentMap := make(map[string]int)
+	
+	// Count occurrences of each incident in slice a
+	for _, inc := range a {
+		key := fmt.Sprintf("%d-%s-%s", inc.ID, inc.CurrentState, inc.Service)
+		incidentMap[key]++
+	}
+
+	// Verify each incident in slice b exists in the map
+	for _, inc := range b {
+		key := fmt.Sprintf("%d-%s-%s", inc.ID, inc.CurrentState, inc.Service)
+		count := incidentMap[key]
+		if count == 0 {
+			return false
+		}
+		incidentMap[key]--
+	}
+
+	return true
+}
+
+// logIncidentChanges logs detailed changes between two sets of incidents
+func logIncidentChanges(logger *types.Logger, oldIncidents, newIncidents []types.Incident) {
+	logger.DebugLog.Printf("Incidents changed: previous count=%d, new count=%d", 
+		len(oldIncidents), len(newIncidents))
+
+	// Create map of old incidents for easy lookup
+	oldIncidentMap := make(map[int]types.Incident)
+	for _, inc := range oldIncidents {
+		oldIncidentMap[inc.ID] = inc
+	}
+
+	// Check for new or modified incidents
+	for _, newInc := range newIncidents {
+		oldInc, exists := oldIncidentMap[newInc.ID]
+		if !exists {
+			logger.DebugLog.Printf("New incident detected [%d]: %s - %s", 
+				newInc.ID, newInc.Service, newInc.CurrentState)
+			continue
+		}
+		if newInc.CurrentState != oldInc.CurrentState {
+			logger.DebugLog.Printf("Incident [%d] state changed: %s -> %s", 
+				newInc.ID, oldInc.CurrentState, newInc.CurrentState)
+		}
+	}
+
+	// Check for removed incidents
+	newIncidentMap := make(map[int]struct{})
+	for _, inc := range newIncidents {
+		newIncidentMap[inc.ID] = struct{}{}
+	}
+	for _, oldInc := range oldIncidents {
+		if _, exists := newIncidentMap[oldInc.ID]; !exists {
+			logger.DebugLog.Printf("Incident removed [%d]: %s", oldInc.ID, oldInc.Service)
+		}
 	}
 }
 
