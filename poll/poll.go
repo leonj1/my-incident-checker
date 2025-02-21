@@ -46,7 +46,7 @@ func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger
 		}
 
 		// Log state changes first
-		state, err := AlertLogic(incidents, light, notifiedIncidents, startTime, logger)
+		state, err := AlertLogic(incidents, light, notifiedIncidents, startTime, logger, currentLightState)
 		if err != nil {
 			logger.ErrorLog.Printf("Alert logic error: %s", err.Error())
 		} else if state != nil {
@@ -193,13 +193,15 @@ func sortIncidentsByTime(incidents []types.Incident) []types.Incident {
 }
 
 // AlertLogic determines the appropriate light state based on incident status
-func AlertLogic(incidents []types.Incident, light lights.Light, notifiedIncidents map[int]bool, startTime time.Time, logger *types.Logger) (lights.State, error) {
+func AlertLogic(incidents []types.Incident, light lights.Light, notifiedIncidents map[int]bool, startTime time.Time, logger *types.Logger, currentLightState string) (lights.State, error) {
 	if len(incidents) == 0 {
 		// Clear notification history and return green state when no incidents
 		for k := range notifiedIncidents {
 			delete(notifiedIncidents, k)
 		}
-		logger.InfoLog.Printf("No active incidents, setting light to green")
+		if currentLightState != "green" {
+			logger.InfoLog.Printf("No active incidents, setting light to green")
+		}
 		return lights.GreenState{}, nil
 	}
 
@@ -216,8 +218,10 @@ func AlertLogic(incidents []types.Incident, light lights.Light, notifiedIncident
 		}
 
 		if createdAt.After(startTime) && isNormalState(mostRecent.CurrentState) {
-			logger.InfoLog.Printf("Most recent incident [%s] is in normal state (%s), setting light to green",
-				mostRecent.Service, mostRecent.CurrentState)
+			if currentLightState != "green" {
+				logger.InfoLog.Printf("Most recent incident [%s] is in normal state (%s), setting light to green",
+					mostRecent.Service, mostRecent.CurrentState)
+			}
 			return lights.GreenState{}, nil
 		}
 	}
@@ -236,8 +240,10 @@ func AlertLogic(incidents []types.Incident, light lights.Light, notifiedIncident
 
 		if !notifiedIncidents[incident.ID] && isRelevantState(incident.CurrentState) {
 			notifiedIncidents[incident.ID] = true
-			logger.InfoLog.Printf("New critical incident detected [%s] in state %s, setting light to red",
-				incident.Service, incident.CurrentState)
+			if currentLightState != "red" {
+				logger.InfoLog.Printf("New critical incident detected [%s] in state %s, setting light to red",
+					incident.Service, incident.CurrentState)
+			}
 			return lights.RedState{}, nil
 		}
 	}
