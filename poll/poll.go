@@ -26,6 +26,7 @@ func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger
 
 	notifiedIncidents := make(map[int]bool)
 	seenIncidents := make(map[int]bool)
+	var cachedIncidents []types.Incident
 
 	for {
 		if err := network.CheckConnectivity(); err != nil {
@@ -42,7 +43,12 @@ func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger
 			continue
 		}
 
-		logger.DebugLog.Printf("Fetched %d incidents", len(incidents))
+		// Only log if incidents have changed
+		if !incidentsEqual(incidents, cachedIncidents) {
+			logger.DebugLog.Printf("Fetched %d incidents (changed from previous fetch)", len(incidents))
+			cachedIncidents = make([]types.Incident, len(incidents))
+			copy(cachedIncidents, incidents)
+		}
 
 		for _, incident := range incidents {
 			if !seenIncidents[incident.ID] {
@@ -59,7 +65,16 @@ func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger
 		if err != nil {
 			logger.ErrorLog.Printf("Alert logic error: %s", err.Error())
 		} else if state != nil {
-			logger.InfoLog.Printf("Light state changed to: %T", state)
+			stateColor := "unknown"
+			switch state.(type) {
+			case lights.RedState:
+				stateColor = "red"
+			case lights.YellowState:
+				stateColor = "yellow"
+			case lights.GreenState:
+				stateColor = "green"
+			}
+			logger.InfoLog.Printf("Light color changed to: %s", stateColor)
 			if err := state.Apply(light); err != nil {
 				logger.ErrorLog.Printf("Failed to apply light state: %s", err.Error())
 			}
@@ -67,6 +82,21 @@ func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger
 
 		time.Sleep(pollInterval)
 	}
+}
+
+// incidentsEqual compares two slices of incidents for equality
+func incidentsEqual(a, b []types.Incident) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].ID != b[i].ID || 
+		   a[i].CurrentState != b[i].CurrentState || 
+		   a[i].Service != b[i].Service {
+			return false
+		}
+	}
+	return true
 }
 
 // fetchIncidents retrieves the list of incidents from the API
