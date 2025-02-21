@@ -43,24 +43,7 @@ func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger
 			continue
 		}
 
-		// Only log if incidents have changed
-		if !incidentsEqual(incidents, cachedIncidents) {
-			logIncidentChanges(logger, cachedIncidents, incidents)
-			cachedIncidents = make([]types.Incident, len(incidents))
-			copy(cachedIncidents, incidents)
-		}
-
-		for _, incident := range incidents {
-			if !seenIncidents[incident.ID] {
-				logger.InfoLog.Printf("New incident detected: [%s] %s - Current State: %s",
-					incident.Service,
-					incident.Incident.Title,
-					incident.CurrentState)
-				seenIncidents[incident.ID] = true
-			}
-		}
-
-		// Log state changes
+		// Log state changes first
 		state, err := AlertLogic(incidents, light, notifiedIncidents, startTime, logger)
 		if err != nil {
 			logger.ErrorLog.Printf("Alert logic error: %s", err.Error())
@@ -74,9 +57,26 @@ func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger
 			case lights.GreenState:
 				stateColor = "green"
 			}
-			logger.InfoLog.Printf("Light color changed to: %s", stateColor)
+			logger.InfoLog.Printf("⚠️ Light color changed to: %s", strings.ToUpper(stateColor))
 			if err := state.Apply(light); err != nil {
 				logger.ErrorLog.Printf("Failed to apply light state: %s", err.Error())
+			}
+		}
+
+		// Then log if incidents have changed
+		if !incidentsEqual(incidents, cachedIncidents) {
+			logIncidentChanges(logger, cachedIncidents, incidents)
+			cachedIncidents = make([]types.Incident, len(incidents))
+			copy(cachedIncidents, incidents)
+		}
+
+		for _, incident := range incidents {
+			if !seenIncidents[incident.ID] {
+				logger.InfoLog.Printf("New incident detected: [%s] %s - Current State: %s",
+					incident.Service,
+					incident.Incident.Title,
+					incident.CurrentState)
+				seenIncidents[incident.ID] = true
 			}
 		}
 
