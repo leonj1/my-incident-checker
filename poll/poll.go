@@ -85,9 +85,6 @@ func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger
 			}
 		}
 
-		// Log current light color periodically
-		logger.DebugLog.Printf("Current light color: %s", strings.ToUpper(currentLightState))
-
 		time.Sleep(pollInterval)
 	}
 }
