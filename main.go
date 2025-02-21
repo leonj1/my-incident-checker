@@ -76,8 +76,6 @@ func main() {
 	}
 	defer cleanup()
 
-	light.Clear()
-
 	fmt.Println("Yellow light on for 2 seconds")
 	light.Blink(lights.StateYellow)
 	time.Sleep(2 * time.Second)
@@ -106,18 +104,39 @@ func main() {
 }
 
 func initializeLight(logger *types.Logger) (lights.Light, func(), error) {
+	var light lights.Light
+	var cleanup func()
+
 	// Try to initialize BLINK1MK3 first
 	if blink1Light, err := lights.NewBlink1Light(); err == nil {
 		fmt.Println("Using BLINK1MK3 light")
 		logger.InfoLog.Printf("Using BLINK1MK3 light")
-		return blink1Light, func() {
+		light = blink1Light
+		cleanup = func() {
 			blink1Light.Close()
-		}, nil
+		}
+	} else {
+		// Fall back to SerialLight
+		fmt.Println("BLINK1MK3 not found, using SerialLight")
+		logger.InfoLog.Printf("BLINK1MK3 not found, using SerialLight")
+		serialLight, err := lights.NewSerialLight("/dev/ttyUSB0", 9600)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to initialize SerialLight: %w", err)
+		}
+		light = serialLight
+		cleanup = func() {
+			if err := serialLight.Close(); err != nil {
+				logger.ErrorLog.Printf("Error closing SerialLight: %s", err.Error())
+			}
+		}
 	}
 
-	// Fall back to SerialLight
-	fmt.Println("BLINK1MK3 not found, using SerialLight")
-	logger.InfoLog.Printf("BLINK1MK3 not found, using SerialLight")
-	serialLight := lights.NewSerialLight("/dev/ttyUSB0", 9600)
-	return serialLight, func() {}, nil
+	// Initialize to green state
+	initialState := lights.GreenState{}
+	if err := initialState.Apply(light); err != nil {
+		return nil, nil, fmt.Errorf("failed to set initial light state: %w", err)
+	}
+	logger.InfoLog.Printf("Light initialized to green")
+
+	return light, cleanup, nil
 }

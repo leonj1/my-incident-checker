@@ -2,7 +2,6 @@ package lights
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/tarm/serial"
 )
@@ -11,22 +10,41 @@ import (
 type SerialLight struct {
 	port     string
 	baudRate int
+	conn     *serial.Port
 }
 
 // NewSerialLight creates a new SerialLight instance
-func NewSerialLight(port string, baudRate int) *SerialLight {
-	return &SerialLight{
+func NewSerialLight(port string, baudRate int) (*SerialLight, error) {
+	light := &SerialLight{
 		port:     port,
 		baudRate: baudRate,
 	}
+
+	// Test the connection immediately
+	conn, err := light.openPort()
+	if err != nil {
+		return nil, fmt.Errorf("failed to open serial port: %w", err)
+	}
+	light.conn = conn
+
+	return light, nil
 }
 
 func (l *SerialLight) openPort() (*serial.Port, error) {
+	if l.conn != nil {
+		return l.conn, nil
+	}
+
 	c := &serial.Config{
 		Name: l.port,
 		Baud: l.baudRate,
 	}
-	return serial.OpenPort(c)
+	conn, err := serial.OpenPort(c)
+	if err != nil {
+		return nil, err
+	}
+	l.conn = conn
+	return conn, nil
 }
 
 func (l *SerialLight) On(cmd interface{}) error {
@@ -51,17 +69,7 @@ func (l *SerialLight) On(cmd interface{}) error {
 		return fmt.Errorf("failed to clear light state: %w", err)
 	}
 
-	s, err := l.openPort()
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := s.Close(); err != nil {
-			log.Printf("Error closing serial port: %s", err.Error())
-		}
-	}()
-
-	return sendCommand(s, cmdByte)
+	return sendCommand(l.conn, cmdByte)
 }
 
 func (l *SerialLight) Blink(cmd interface{}) error {
@@ -82,30 +90,10 @@ func (l *SerialLight) Blink(cmd interface{}) error {
 		return fmt.Errorf("unsupported state: %s", state)
 	}
 
-	s, err := l.openPort()
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := s.Close(); err != nil {
-			log.Printf("Error closing serial port: %s", err.Error())
-		}
-	}()
-
-	return sendCommand(s, cmdByte)
+	return sendCommand(l.conn, cmdByte)
 }
 
 func (l *SerialLight) Clear() error {
-	s, err := l.openPort()
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := s.Close(); err != nil {
-			log.Printf("Error closing serial port: %s", err.Error())
-		}
-	}()
-
 	initialCommands := []byte{
 		cmdBuzzerOff,
 		cmdRedOff,
@@ -114,9 +102,19 @@ func (l *SerialLight) Clear() error {
 	}
 
 	for _, cmd := range initialCommands {
-		if err := sendCommand(s, cmd); err != nil {
+		if err := sendCommand(l.conn, cmd); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// Close implements io.Closer interface
+func (l *SerialLight) Close() error {
+	if l.conn != nil {
+		err := l.conn.Close()
+		l.conn = nil
+		return err
 	}
 	return nil
 }
