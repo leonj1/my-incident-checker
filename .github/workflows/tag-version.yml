@@ -23,11 +23,6 @@ jobs:
         with:
           go-version: '1.21'
 
-      - name: Install cross-compilation dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi gcc-mingw-w64
-
       - name: Get latest tag
         id: get-latest-tag
         run: |
@@ -46,35 +41,10 @@ jobs:
           echo "New version: $new_version"
           echo "new_version=$new_version" >> $GITHUB_OUTPUT
 
-      - name: Build binaries
-        run: |
-          mkdir -p dist
-          # Build for Linux AMD64
-          echo "Building for linux/amd64..."
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=1 go build -o "dist/incident-checker-${{ steps.bump-version.outputs.new_version }}-linux-amd64" .
-          chmod +x "dist/incident-checker-${{ steps.bump-version.outputs.new_version }}-linux-amd64"
-
-          # Build for Linux ARM64
-          echo "Building for linux/arm64..."
-          CC=aarch64-linux-gnu-gcc GOOS=linux GOARCH=arm64 CGO_ENABLED=1 go build -o "dist/incident-checker-${{ steps.bump-version.outputs.new_version }}-linux-arm64" .
-          chmod +x "dist/incident-checker-${{ steps.bump-version.outputs.new_version }}-linux-arm64"
-
-          # Build for Windows AMD64 (without serial support)
-          echo "Building for windows/amd64..."
-          CC=x86_64-w64-mingw32-gcc GOOS=windows GOARCH=amd64 CGO_ENABLED=1 go build -tags noserial -o "dist/incident-checker-${{ steps.bump-version.outputs.new_version }}-windows-amd64.exe" .
-
-          # Build for macOS (without serial support)
-          echo "Building for darwin/amd64..."
-          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -tags noserial -o "dist/incident-checker-${{ steps.bump-version.outputs.new_version }}-darwin-amd64" .
-          echo "Building for darwin/arm64..."
-          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -tags noserial -o "dist/incident-checker-${{ steps.bump-version.outputs.new_version }}-darwin-arm64" .
-
-      - name: Generate SHA256 checksums
-        id: sha
-        run: |
-          cd dist
-          sha256sum * > checksums.txt
-          echo "hashes=$(cat checksums.txt)" >> $GITHUB_OUTPUT
+      - name: Build release artifacts
+        env:
+          VERSION: ${{ steps.bump-version.outputs.new_version }}
+        run: make release
 
       - name: Create and push tag
         run: |
@@ -93,24 +63,23 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            dist/*
+            release/my-incident-checker-${{ steps.bump-version.outputs.new_version }}
+            release/my-incident-checker-arm-${{ steps.bump-version.outputs.new_version }}
+            release/my-incident-checker-386-${{ steps.bump-version.outputs.new_version }}
+            release/my-incident-checker-${{ steps.bump-version.outputs.new_version }}.tar.gz
+            release/my-incident-checker-${{ steps.bump-version.outputs.new_version }}.sha256
           body: |
             ## Release ${{ steps.bump-version.outputs.new_version }}
             
             ### Assets
-            - Linux (amd64, arm64) - Full functionality with serial support
-            - macOS (amd64, arm64) - Basic functionality without serial support
-            - Windows (amd64) - Basic functionality without serial support
+            - Linux (amd64)
+            - Linux (arm)
+            - Linux (386)
             
             ### SHA-256 Checksums
             ```
-            ${{ steps.sha.outputs.hashes }}
+            $(cat release/my-incident-checker-${{ steps.bump-version.outputs.new_version }}.sha256)
             ```
-            
-            ### Platform Notes
-            - Linux builds include full serial port support
-            - macOS and Windows builds exclude serial port functionality
-            - For serial port support on macOS/Windows, please build from source
             
             ### Changes
             - Automated release from master branch
