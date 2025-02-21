@@ -45,7 +45,7 @@ func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger
 
 		// Only log if incidents have changed
 		if !incidentsEqual(incidents, cachedIncidents) {
-			logger.DebugLog.Printf("Fetched %d incidents (changed from previous fetch)", len(incidents))
+			logIncidentChanges(logger, cachedIncidents, incidents)
 			cachedIncidents = make([]types.Incident, len(incidents))
 			copy(cachedIncidents, incidents)
 		}
@@ -110,6 +110,43 @@ func incidentsEqual(a, b []types.Incident) bool {
 	}
 
 	return true
+}
+
+// logIncidentChanges logs detailed changes between two sets of incidents
+func logIncidentChanges(logger *types.Logger, oldIncidents, newIncidents []types.Incident) {
+	logger.DebugLog.Printf("Incidents changed: previous count=%d, new count=%d", 
+		len(oldIncidents), len(newIncidents))
+
+	// Create map of old incidents for easy lookup
+	oldIncidentMap := make(map[int]types.Incident)
+	for _, inc := range oldIncidents {
+		oldIncidentMap[inc.ID] = inc
+	}
+
+	// Check for new or modified incidents
+	for _, newInc := range newIncidents {
+		oldInc, exists := oldIncidentMap[newInc.ID]
+		if !exists {
+			logger.DebugLog.Printf("New incident detected [%d]: %s - %s", 
+				newInc.ID, newInc.Service, newInc.CurrentState)
+			continue
+		}
+		if newInc.CurrentState != oldInc.CurrentState {
+			logger.DebugLog.Printf("Incident [%d] state changed: %s -> %s", 
+				newInc.ID, oldInc.CurrentState, newInc.CurrentState)
+		}
+	}
+
+	// Check for removed incidents
+	newIncidentMap := make(map[int]struct{})
+	for _, inc := range newIncidents {
+		newIncidentMap[inc.ID] = struct{}{}
+	}
+	for _, oldInc := range oldIncidents {
+		if _, exists := newIncidentMap[oldInc.ID]; !exists {
+			logger.DebugLog.Printf("Incident removed [%d]: %s", oldInc.ID, oldInc.Service)
+		}
+	}
 }
 
 // fetchIncidents retrieves the list of incidents from the API
