@@ -84,18 +84,31 @@ func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger
 	}
 }
 
-// incidentsEqual compares two slices of incidents for equality
+// incidentsEqual compares two slices of incidents for equality, regardless of order
 func incidentsEqual(a, b []types.Incident) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	for i := range a {
-		if a[i].ID != b[i].ID || 
-		   a[i].CurrentState != b[i].CurrentState || 
-		   a[i].Service != b[i].Service {
+
+	// Create a map to track incidents by their unique properties
+	incidentMap := make(map[string]int)
+	
+	// Count occurrences of each incident in slice a
+	for _, inc := range a {
+		key := fmt.Sprintf("%d-%s-%s", inc.ID, inc.CurrentState, inc.Service)
+		incidentMap[key]++
+	}
+
+	// Verify each incident in slice b exists in the map
+	for _, inc := range b {
+		key := fmt.Sprintf("%d-%s-%s", inc.ID, inc.CurrentState, inc.Service)
+		count := incidentMap[key]
+		if count == 0 {
 			return false
 		}
+		incidentMap[key]--
 	}
+
 	return true
 }
 
