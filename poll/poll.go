@@ -27,11 +27,13 @@ func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger
 	notifiedIncidents := make(map[int]bool)
 	seenIncidents := make(map[int]bool)
 	var cachedIncidents []types.Incident
+	currentLightState := "green" // Track current light state
 
 	for {
 		if err := network.CheckConnectivity(); err != nil {
 			logger.WarnLog.Printf("Internet connectivity issue: %s", err.Error())
 			light.On(lights.StateYellow)
+			currentLightState = "yellow"
 			time.Sleep(pollInterval)
 			continue
 		}
@@ -57,7 +59,10 @@ func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger
 			case lights.GreenState:
 				stateColor = "green"
 			}
-			logger.InfoLog.Printf("⚠️ Light color changed to: %s", strings.ToUpper(stateColor))
+			if stateColor != currentLightState {
+				logger.InfoLog.Printf("⚠️ Light color changed to: %s", strings.ToUpper(stateColor))
+				currentLightState = stateColor
+			}
 			if err := state.Apply(light); err != nil {
 				logger.ErrorLog.Printf("Failed to apply light state: %s", err.Error())
 			}
@@ -80,6 +85,9 @@ func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger
 			}
 		}
 
+		// Log current light color periodically
+		logger.DebugLog.Printf("Current light color: %s", strings.ToUpper(currentLightState))
+
 		time.Sleep(pollInterval)
 	}
 }
@@ -92,7 +100,7 @@ func incidentsEqual(a, b []types.Incident) bool {
 
 	// Create a map to track incidents by their unique properties
 	incidentMap := make(map[string]int)
-	
+
 	// Count occurrences of each incident in slice a
 	for _, inc := range a {
 		key := fmt.Sprintf("%d-%s-%s", inc.ID, inc.CurrentState, inc.Service)
@@ -114,7 +122,7 @@ func incidentsEqual(a, b []types.Incident) bool {
 
 // logIncidentChanges logs detailed changes between two sets of incidents
 func logIncidentChanges(logger *types.Logger, oldIncidents, newIncidents []types.Incident) {
-	logger.DebugLog.Printf("Incidents changed: previous count=%d, new count=%d", 
+	logger.DebugLog.Printf("Incidents changed: previous count=%d, new count=%d",
 		len(oldIncidents), len(newIncidents))
 
 	// Create map of old incidents for easy lookup
@@ -127,12 +135,12 @@ func logIncidentChanges(logger *types.Logger, oldIncidents, newIncidents []types
 	for _, newInc := range newIncidents {
 		oldInc, exists := oldIncidentMap[newInc.ID]
 		if !exists {
-			logger.DebugLog.Printf("New incident detected [%d]: %s - %s", 
+			logger.DebugLog.Printf("New incident detected [%d]: %s - %s",
 				newInc.ID, newInc.Service, newInc.CurrentState)
 			continue
 		}
 		if newInc.CurrentState != oldInc.CurrentState {
-			logger.DebugLog.Printf("Incident [%d] state changed: %s -> %s", 
+			logger.DebugLog.Printf("Incident [%d] state changed: %s -> %s",
 				newInc.ID, oldInc.CurrentState, newInc.CurrentState)
 		}
 	}
@@ -211,7 +219,7 @@ func AlertLogic(incidents []types.Incident, light lights.Light, notifiedIncident
 		}
 
 		if createdAt.After(startTime) && isNormalState(mostRecent.CurrentState) {
-			logger.InfoLog.Printf("Most recent incident [%s] is in normal state (%s), setting light to green", 
+			logger.InfoLog.Printf("Most recent incident [%s] is in normal state (%s), setting light to green",
 				mostRecent.Service, mostRecent.CurrentState)
 			return lights.GreenState{}, nil
 		}
@@ -231,7 +239,7 @@ func AlertLogic(incidents []types.Incident, light lights.Light, notifiedIncident
 
 		if !notifiedIncidents[incident.ID] && isRelevantState(incident.CurrentState) {
 			notifiedIncidents[incident.ID] = true
-			logger.InfoLog.Printf("New critical incident detected [%s] in state %s, setting light to red", 
+			logger.InfoLog.Printf("New critical incident detected [%s] in state %s, setting light to red",
 				incident.Service, incident.CurrentState)
 			return lights.RedState{}, nil
 		}
