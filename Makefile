@@ -1,4 +1,4 @@
-.PHONY: build build-arm build-amd32 all clean release
+.PHONY: build build-arm build-amd32 all clean release setup-hooks
 
 VERSION ?= $(shell git describe --tags --always --dirty)
 RELEASE_DIR = release
@@ -35,3 +35,10 @@ release: clean build
 
 # Build all architectures
 all: build build-arm build-amd32
+
+# Setup git hooks
+setup-hooks:
+	@mkdir -p .githooks
+	@chmod +x .githooks/pre-push
+	@git config core.hooksPath .githooks
+	@echo "Git hooks installed successfully"
