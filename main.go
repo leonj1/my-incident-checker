@@ -109,7 +109,7 @@ func initializeLight(logger *types.Logger) (lights.Light, func(), error) {
 
 	// Try to initialize BLINK1MK3 first
 	if blink1Light, err := lights.NewBlink1Light(); err == nil {
-		fmt.Println("Using BLINK1MK3 light")
+		fmt.Println("Using BLINK1MK3 light.")
 		logger.InfoLog.Printf("Using BLINK1MK3 light")
 		light = blink1Light
 		cleanup = func() {
