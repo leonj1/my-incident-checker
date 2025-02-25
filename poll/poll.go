@@ -30,13 +30,7 @@ func PollIncidents(startTime time.Time, light lights.Light, logger *types.Logger
 	currentLightState := "green" // Track current light state
 
 	for {
-		if err := network.CheckConnectivity(); err != nil {
-			logger.WarnLog.Printf("Internet connectivity issue: %s", err.Error())
-			light.On(lights.StateYellow)
-			currentLightState = "yellow"
-			time.Sleep(pollInterval)
-			continue
-		}
+		// Connectivity check disabled
 
 		incidents, err := fetchIncidents()
 		if err != nil {
