@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"my-incident-checker/lights"
-	"my-incident-checker/network"
 	"my-incident-checker/types"
 )
 
