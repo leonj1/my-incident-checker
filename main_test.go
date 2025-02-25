@@ -278,6 +278,28 @@ func TestAlertLogic(t *testing.T) {
 			wantState:         lights.RedState{},
 			wantErr:           false,
 		},
+		{
+			name: "MAJOR incident in uppercase",
+			incidents: []types.Incident{
+				{
+					ID:           3,
+					Service:      "database",
+					PrevState:    "operational",
+					CurrentState: "MAJOR",
+					CreatedAt:    "2025-02-20T16:30:00.000000",
+					Incident: types.IncidentDetails{
+						Title:       "Database Major Incident",
+						Description: "Database experiencing major performance issues",
+						Components:  []string{"database", "storage"},
+						URL:        "https://status.joseserver.com/incidents/database-1740068900",
+					},
+				},
+			},
+			notifiedIncidents: map[int]bool{},
+			startTime:         time.Date(2025, 2, 20, 16, 27, 0, 0, time.UTC),
+			wantState:         lights.RedState{},
+			wantErr:           false,
+		},
 	}
 
 	for _, tt := range tests {

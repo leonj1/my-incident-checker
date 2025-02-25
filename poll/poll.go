@@ -263,6 +263,10 @@ func isNormalState(state string) bool {
 
 // isRelevantState checks if the state is critical, outage, degraded, or major
 func isRelevantState(state string) bool {
-	return state == types.StateCritical || state == types.StateOutage || 
-		state == types.StateDegraded || state == types.StateMajor
+	// Convert to lowercase for case-insensitive comparison
+	stateLower := strings.ToLower(state)
+	return stateLower == strings.ToLower(types.StateCritical) || 
+		stateLower == strings.ToLower(types.StateOutage) || 
+		stateLower == strings.ToLower(types.StateDegraded) || 
+		stateLower == strings.ToLower(types.StateMajor)
 }
