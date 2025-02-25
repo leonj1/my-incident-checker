@@ -18,6 +18,7 @@ const (
 	StateCritical    = "critical"
 	StateOutage      = "outage"
 	StateDegraded    = "degraded"
+	StateMajor       = "major"
 )
 
 type Logger struct {
