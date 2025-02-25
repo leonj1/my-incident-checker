@@ -261,7 +261,8 @@ func isNormalState(state string) bool {
 	return state == types.StateOperational || state == types.StateMaintenance
 }
 
-// isRelevantState checks if the state is critical, outage, or degraded
+// isRelevantState checks if the state is critical, outage, degraded, or major
 func isRelevantState(state string) bool {
-	return state == types.StateCritical || state == types.StateOutage || state == types.StateDegraded
+	return state == types.StateCritical || state == types.StateOutage || 
+		state == types.StateDegraded || state == types.StateMajor
 }
